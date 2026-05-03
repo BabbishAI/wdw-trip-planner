@@ -389,7 +389,6 @@ function recalc() {
     summary.textContent = "Pick a resort, room type, and a valid date range.";
     breakdown.innerHTML = "";
     footnote.textContent = "";
-    $("planDvcNote").innerHTML = "";
     TRIP.hotel = { cash: 0, dvc: 0, label: null, checkIn: null };
     if (typeof recalcTickets === "function") recalcTickets();
     recalcTripTotal();
@@ -453,16 +452,13 @@ function recalc() {
     </table>
   `;
 
-  const taxNote = `Rates already include tax (${(resort.taxRate * 100).toFixed(1)}%).`;
-  const missingNote = missing > 0 ? ` ${missing} night(s) had no rate data.` : "";
-  footnote.innerHTML = `${taxNote} Source: mousesavers.com 2026 chart.${missingNote}
+  const missingNote = missing > 0 ? `${missing} night(s) had no rate data.` : "";
+  footnote.innerHTML = `${missingNote}
     <div class="uct-compare-row">
       <span>Want a real quote for this stay?</span>
       <a href="https://www.undercovertourist.com/orlando/walt-disney-world-resort/" target="_blank" rel="noopener">Compare hotel pricing on Undercover Tourist ↗</a>
       ${resort.tier === "dvc" ? '<a href="https://dvcrequest.com/" target="_blank" rel="noopener">Get DVC rental quote on David\'s ↗</a>' : ""}
     </div>`;
-
-  $("planDvcNote").innerHTML = dvc ? dvcNoteHTML(resort.dvcPerPointRate, dvc.exact) : "";
 
   TRIP.hotel = {
     cash: total,
@@ -631,8 +627,8 @@ function recalcTripTotal() {
 
 function recalcTickets() {
   const days = parseInt($("ticketDays").value, 10);
-  const adults = Math.max(0, parseInt($("ticketAdults").value, 10) || 0);
-  const children = Math.max(0, parseInt($("ticketChildren").value, 10) || 0);
+  const adults = Math.max(0, parseInt($("adults").value, 10) || 0);
+  const children = Math.max(0, parseInt($("children").value, 10) || 0);
 
   // Tier is derived from the hotel check-in date — no manual override.
   const checkIn = TRIP.hotel.checkIn;
@@ -794,8 +790,6 @@ function init() {
   if (window.TICKETS) {
     recalcTickets();
     $("ticketDays").addEventListener("change", recalcTickets);
-    $("ticketAdults").addEventListener("input", recalcTickets);
-    $("ticketChildren").addEventListener("input", recalcTickets);
     for (const r of document.querySelectorAll('input[name="ticketType"]')) {
       r.addEventListener("change", recalcTickets);
     }
@@ -807,11 +801,17 @@ function init() {
   if (window.DINING) {
     populateDiningList();
     recalcDining();
-    $("adults").addEventListener("input", recalcDining);
-    $("children").addEventListener("input", recalcDining);
     $("includeTax").addEventListener("change", recalcDining);
     $("includeGratuity").addEventListener("change", recalcDining);
   }
+
+  // Shared party-size inputs (Trip basics) drive both tickets and dining.
+  const onPartyChange = () => {
+    if (typeof recalcTickets === "function") recalcTickets();
+    if (typeof recalcDining === "function") recalcDining();
+  };
+  $("adults").addEventListener("input", onPartyChange);
+  $("children").addEventListener("input", onPartyChange);
 }
 
 init();

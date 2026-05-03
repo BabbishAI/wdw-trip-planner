@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>WDW Trip Planner — Info & Sources</title>
+  <style>
+    :root {
+      --bg: #fafaf7;
+      --ink: #1d1d1f;
+      --muted: #6b6b6b;
+      --accent: #0066cc;
+      --border: #e3e3df;
+      --row-alt: #f3f3ee;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+      background: var(--bg);
+      color: var(--ink);
+      line-height: 1.55;
+    }
+    .container { max-width: 760px; margin: 0 auto; padding: 24px; }
+    h1 { font-size: 1.6rem; margin: 0 0 4px; }
+    h2 { font-size: 1.15rem; margin: 28px 0 8px; }
+    h3 { font-size: 0.98rem; margin: 18px 0 4px; }
+    .back { display: inline-block; margin-bottom: 12px; color: var(--accent); text-decoration: none; font-size: 0.9rem; }
+    .back:hover { text-decoration: underline; }
+    .panel {
+      background: white; border: 1px solid var(--border); border-radius: 10px;
+      padding: 20px 24px; margin-bottom: 16px;
+    }
+    p { margin: 0 0 10px; }
+    ul { margin: 4px 0 10px; padding-left: 22px; }
+    li { margin-bottom: 4px; }
+    code { background: var(--row-alt); padding: 1px 5px; border-radius: 4px; font-size: 0.88em; }
+    a { color: var(--accent); }
+    .muted { color: var(--muted); font-size: 0.9rem; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <a class="back" href="index.html">← Back to planner</a>
+    <h1>Info & Sources</h1>
+    <p class="muted">How the numbers in this planner are calculated, where they come from, and what they don't include.</p>
+
+    <div class="panel">
+      <h2>The big caveat: rack rates aren't what you'll pay</h2>
+      <p>Every number here is a <strong>rack rate</strong> (Disney's published list price). Almost nobody actually pays rack — Disney runs room offers, AP discounts, free dining, and seasonal promos throughout the year, and authorized resellers like Undercover Tourist discount tickets year-round.</p>
+      <p>Treat this planner as the <strong>upper bound</strong>. For a real quote on a specific stay, click the "Get UCT quote" or "Compare on Undercover Tourist" links beside each result.</p>
+    </div>
+
+    <div class="panel">
+      <h2>Hotel rates</h2>
+      <p><strong>Source:</strong> <a href="https://www.mousesavers.com/2026-disney-world-room-rates-season-dates/" target="_blank" rel="noopener">mousesavers.com 2026 rate charts</a>.</p>
+      <p><strong>Tax:</strong> Already included in every rate (12.5% standard, 13.5% at All-Star resorts).</p>
+      <h3>How nightly totals are calculated</h3>
+      <p>Mousesavers publishes rates in three day-of-week tiers per season:</p>
+      <ul>
+        <li><strong>Mon–Wed</strong> — Mon, Tue, Wed</li>
+        <li><strong>Sun/Thu</strong> — Sun, Thu</li>
+        <li><strong>Fri/Sat</strong> — Fri, Sat</li>
+      </ul>
+      <p>The calculator looks up each night's exact tier rate and sums them. The total is the <strong>actual rack rate</strong>, not an average. Flat-rate seasons (Easter, holidays, etc.) have all three tiers equal.</p>
+      <h3>Coverage</h3>
+      <p>v1 has <strong>3 resorts seeded</strong>: Disney's All-Star Movies (value), Wilderness Lodge (deluxe), and Riviera Resort (DVC). Adding more is a data-entry task — extend <code>rates.js</code> following the existing pattern.</p>
+    </div>
+
+    <div class="panel">
+      <h2>Park tickets</h2>
+      <p><strong>Source:</strong> mousesavers.com 2026 regular ticket grid.</p>
+      <p><strong>Tax:</strong> Prices include 6.5% Florida sales tax.</p>
+      <h3>Age brackets</h3>
+      <ul>
+        <li><strong>Adult</strong> = 10+</li>
+        <li><strong>Child</strong> = 3–9</li>
+        <li><strong>Under 3</strong> = free (no ticket required)</li>
+      </ul>
+      <p>Gate-purchase prices for 3+ day tickets are $21.30 more each than the online prices used here.</p>
+      <h3>6-tier interpolation</h3>
+      <p>Disney prices tickets by date using ~6 tiers. Mousesavers publishes only the lowest (Tier 0) and highest (Tier 5); the four tiers in between are <strong>linearly interpolated</strong>. The 2026 date-to-tier mapping is hand-built from public knowledge and editable in <code>tickets.js</code> (<code>tierCalendar</code>).</p>
+      <p>Verified against UCT for Nov 15, 2026: Tier 4 yields $2,854 vs UCT's $2,834 — within 1%.</p>
+      <h3>UCT discount estimate</h3>
+      <p>The "≈ $X via UCT" line applies a typical <strong>~4% discount</strong> for an authorized reseller (<a href="https://www.undercovertourist.com/" target="_blank" rel="noopener">Undercover Tourist</a>). Their actual quote varies by dates and current promos. Click "Get UCT quote" beside each ticket option for the real number. The UCT estimate is informational only — the trip total uses the Disney rack rate.</p>
+    </div>
+
+    <div class="panel">
+      <h2>Dining</h2>
+      <p><strong>Sources:</strong> minitravellers.co.uk 2026 character dining guide and disneyfoodblog.com.</p>
+      <p><strong>Tax & gratuity:</strong> Per-row prices are the <strong>prix-fixe menu price</strong> — pre-tax, pre-gratuity. The two toggles in the dining panel ("Include 6.5% sales tax" and "Include 20% gratuity") add those to the grand total.</p>
+      <p><strong>Children under 3</strong> dine free.</p>
+    </div>
+
+    <div class="panel">
+      <h2>DVC (Disney Vacation Club) equivalent</h2>
+      <p>For DVC resorts, the planner shows a "DVC equivalent" cost — what the same stay would cost if you rented points from a member instead of paying cash.</p>
+      <h3>Two methods</h3>
+      <ul>
+        <li><strong>Exact</strong> — when a points chart is loaded for the room, the planner multiplies the points needed for your dates by an estimated David's DVC Rental Store renter rate ($20–24/pt).</li>
+        <li><strong>Estimate (~40% off cash)</strong> — when no points chart is loaded for that room, the planner approximates DVC cost as <strong>40% off the cash rate</strong>. Real savings range 30–50% depending on resort and dates; 40% is the industry midpoint.</li>
+      </ul>
+      <p>For an exact quote, go to <a href="https://dvcrequest.com/" target="_blank" rel="noopener">dvcrequest.com</a>.</p>
+    </div>
+
+    <div class="panel">
+      <h2>Out of v1 scope</h2>
+      <ul>
+        <li>The other ~25 WDW Disney-owned hotels (only 3 are seeded so far)</li>
+        <li>Transportation, souvenirs, parking, MagicBand+, etc.</li>
+        <li>Discount/promo overlays (free dining, AP discounts, room offers) — these change month-to-month and would need a live data feed</li>
+      </ul>
+    </div>
+
+    <a class="back" href="index.html">← Back to planner</a>
+  </div>
+</body>
+</html>
