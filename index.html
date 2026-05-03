@@ -1,0 +1,521 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>WDW Trip Planner — Rack Rate Calculator</title>
+  <style>
+    :root {
+      --bg: #fafaf7;
+      --ink: #1d1d1f;
+      --muted: #6b6b6b;
+      --accent: #0066cc;
+      --border: #e3e3df;
+      --row-alt: #f3f3ee;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+      background: var(--bg);
+      color: var(--ink);
+      line-height: 1.45;
+    }
+    .container { max-width: 960px; margin: 0 auto; padding: 24px; }
+    h1 { font-size: 1.6rem; margin: 0 0 4px; }
+    .sub { color: var(--muted); margin: 0 0 24px; font-size: 0.92rem; }
+    .panel {
+      background: white; border: 1px solid var(--border); border-radius: 10px;
+      padding: 20px; margin-bottom: 20px;
+    }
+    .grid {
+      display: grid; gap: 14px;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    }
+    label { display: block; font-size: 0.85rem; color: var(--muted); margin-bottom: 4px; font-weight: 500; }
+    select, input[type="date"], input[type="number"] {
+      width: 100%; padding: 8px 10px; border: 1px solid var(--border);
+      border-radius: 6px; font-size: 0.95rem; background: white; color: var(--ink);
+    }
+    .panel-title { font-size: 1.05rem; margin: 0 0 14px; font-weight: 600; }
+    .panel-title .hint { color: var(--muted); font-weight: 400; font-size: 0.88rem; margin-left: 8px; }
+    .cheapest-row td { vertical-align: middle; }
+    .cheapest-row .total { font-weight: 600; color: var(--accent); }
+    .summary { display: flex; flex-wrap: wrap; gap: 24px; align-items: baseline; }
+    .summary .big { font-size: 2rem; font-weight: 600; color: var(--accent); }
+    .summary .range { color: var(--muted); }
+    .summary .meta { color: var(--muted); font-size: 0.9rem; }
+    table { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 0.9rem; }
+    th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border); }
+    th { color: var(--muted); font-weight: 500; font-size: 0.82rem; text-transform: uppercase; letter-spacing: 0.04em; }
+    tr:nth-child(even) td { background: var(--row-alt); }
+    .right { text-align: right; }
+    .empty { color: var(--muted); font-style: italic; }
+    .tag {
+      display: inline-block; padding: 2px 8px; border-radius: 12px;
+      background: #eaeaea; color: #444; font-size: 0.75rem; margin-left: 8px;
+    }
+    .tag-value { background: #e6f4ea; color: #1f5c34; }
+    .tag-deluxe { background: #fdebd0; color: #8a4500; }
+    .tag-dvc { background: #e8e4f3; color: #4a2e8a; }
+    .footnote { color: var(--muted); font-size: 0.82rem; margin-top: 16px; }
+    .dvc-note {
+      margin-top: 16px; padding: 12px 14px;
+      background: #f3efff; border-left: 3px solid #6f5ed1;
+      border-radius: 6px; font-size: 0.88rem; color: #2c2456; line-height: 1.5;
+    }
+    .dvc-note a { color: #4a39b7; }
+    .dvc-note strong { color: #1d1240; }
+    .dvc-summary {
+      padding: 8px 14px; border-left: 3px solid #6f5ed1; background: #f3efff;
+      border-radius: 6px;
+    }
+    .dvc-summary .dvc-label { font-size: 0.75rem; color: #4a39b7; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600; }
+    .dvc-summary .dvc-amount { font-size: 1.5rem; font-weight: 600; color: #2c2456; }
+    .dvc-summary .dvc-meta { font-size: 0.82rem; color: #4a39b7; }
+    .dvc-cell { color: #2c2456; }
+    .dvc-cell small { color: #6f5ed1; font-size: 0.78rem; margin-left: 4px; }
+    .area-heading {
+      font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.06em;
+      color: var(--muted); margin: 16px 0 6px; font-weight: 600;
+    }
+    .dining-row {
+      display: grid; grid-template-columns: 24px 1fr 220px 90px;
+      gap: 12px; align-items: center; padding: 6px 0;
+      border-bottom: 1px solid var(--border);
+    }
+    .dining-row.checked { background: #fffbe9; }
+    .dining-row .dining-name { font-weight: 500; }
+    .dining-row .dining-area { color: var(--muted); font-size: 0.82rem; margin-left: 6px; }
+    .dining-row .dining-type { color: var(--muted); font-size: 0.78rem; display: block; }
+    .dining-row select {
+      padding: 5px 8px; font-size: 0.86rem; border: 1px solid var(--border);
+      border-radius: 5px; background: white;
+    }
+    .dining-row select:disabled { background: var(--row-alt); color: var(--muted); }
+    .dining-row .dining-rowTotal {
+      text-align: right; font-variant-numeric: tabular-nums; font-weight: 500;
+    }
+    .dining-row .dining-rowTotal.muted { color: var(--muted); font-weight: 400; }
+    .dining-total {
+      margin-top: 16px; padding: 14px 16px;
+      background: var(--row-alt); border-radius: 8px;
+      display: flex; justify-content: space-between; align-items: baseline;
+    }
+    .dining-total .label { color: var(--muted); font-size: 0.9rem; }
+    .dining-total .amount { font-size: 1.6rem; font-weight: 600; color: var(--accent); }
+    .dining-total .breakdown { color: var(--muted); font-size: 0.82rem; }
+    .dining-toggles {
+      display: flex; gap: 20px; flex-wrap: wrap; margin-top: 12px;
+      padding: 10px 12px; background: var(--row-alt); border-radius: 6px;
+      font-size: 0.9rem;
+    }
+    .dining-toggles label {
+      display: inline-flex; align-items: center; gap: 6px;
+      color: var(--ink); margin: 0; font-weight: 400; cursor: pointer;
+    }
+    .dining-total .ledger {
+      display: grid; grid-template-columns: auto auto;
+      gap: 2px 16px; margin-top: 4px; font-variant-numeric: tabular-nums;
+    }
+    .dining-total .ledger .name { color: var(--muted); font-size: 0.85rem; }
+    .dining-total .ledger .val  { text-align: right; color: var(--ink); font-size: 0.85rem; }
+    .ticket-table { font-size: 0.92rem; }
+    .ticket-table .ticket-name { font-weight: 500; }
+    .ticket-table .ticket-desc { color: var(--muted); font-size: 0.78rem; }
+    .ticket-table .price-cell { font-variant-numeric: tabular-nums; }
+    .ticket-table .price-low  { color: #1f5c34; }
+    .ticket-table .price-high { color: #8a4500; }
+    .ticket-table .per-person { color: var(--muted); font-size: 0.76rem; display: block; }
+    .trip-total-panel {
+      background: linear-gradient(180deg, white, #f7f4ec);
+      border: 1px solid var(--border); border-top: 3px solid var(--accent);
+    }
+    .trip-lines { margin-top: 14px; }
+    .trip-line {
+      display: grid; grid-template-columns: 130px 1fr auto;
+      gap: 12px; align-items: baseline; padding: 8px 0;
+      border-bottom: 1px solid var(--border);
+    }
+    .trip-line:last-of-type { border-bottom: none; }
+    .trip-line .trip-line-label { color: var(--muted); font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600; }
+    .trip-line .trip-line-detail { color: var(--ink); font-size: 0.95rem; }
+    .trip-line .trip-line-amount { font-variant-numeric: tabular-nums; font-size: 1.05rem; font-weight: 500; }
+    .trip-line.trip-grand {
+      margin-top: 8px; padding-top: 16px; border-top: 2px solid var(--ink);
+      border-bottom: none;
+    }
+    .trip-line.trip-grand .trip-line-label { color: var(--ink); font-size: 0.95rem; }
+    .trip-line.trip-grand .trip-line-amount { font-size: 1.8rem; font-weight: 600; color: var(--accent); }
+    .trip-line .empty-line { color: var(--muted); font-style: italic; font-size: 0.9rem; }
+    .ticket-tier-row {
+      display: flex; gap: 18px; align-items: center; flex-wrap: wrap;
+      padding: 8px 12px; background: var(--row-alt); border-radius: 6px;
+      margin-top: 12px; font-size: 0.9rem;
+    }
+    .ticket-tier-row label {
+      display: inline-flex; align-items: center; gap: 6px;
+      margin: 0; cursor: pointer; font-weight: 400; color: var(--ink);
+    }
+    .ticket-tier-row .ticket-tier-label { color: var(--muted); font-size: 0.85rem; font-weight: 500; }
+    .ticket-options-grid {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 12px; margin-top: 14px;
+    }
+    .ticket-option {
+      display: flex; align-items: center; gap: 12px;
+      padding: 12px 14px; border: 1px solid var(--border); border-radius: 8px;
+      background: white; cursor: pointer; margin: 0;
+    }
+    .ticket-option:has(input:checked) {
+      border-color: var(--accent); background: #f0f7ff;
+    }
+    .ticket-option-text { flex: 1; }
+    .ticket-option-label { font-weight: 500; font-size: 0.95rem; }
+    .ticket-option-desc { color: var(--muted); font-size: 0.78rem; }
+    .ticket-option-price {
+      text-align: right; font-variant-numeric: tabular-nums;
+    }
+    .ticket-option-price strong { font-size: 1.05rem; color: var(--accent); }
+    .ticket-option-price small { display: block; font-size: 0.74rem; color: var(--muted); margin-top: 2px; }
+    .uct-estimate {
+      font-size: 0.78rem; color: #2f6b2a; font-style: italic; margin-top: 6px;
+    }
+    .uct-link {
+      display: inline-block; font-size: 0.74rem; color: var(--accent);
+      text-decoration: none; margin-top: 4px; white-space: nowrap;
+    }
+    .uct-link:hover { text-decoration: underline; }
+    .uct-compare-row {
+      margin-top: 12px; padding: 10px 12px;
+      background: #f0f7ff; border-left: 3px solid var(--accent);
+      border-radius: 6px; font-size: 0.86rem; color: #1f3d6b;
+      display: flex; gap: 14px; flex-wrap: wrap; align-items: center;
+    }
+    .uct-compare-row a { color: var(--accent); text-decoration: none; font-weight: 500; }
+    .uct-compare-row a:hover { text-decoration: underline; }
+    .panel.collapsible { padding: 0; }
+    .panel.collapsible > summary {
+      list-style: none; cursor: pointer; padding: 16px 20px;
+      display: flex; align-items: center; gap: 10px;
+      border-radius: 10px;
+    }
+    .panel.collapsible > summary::-webkit-details-marker { display: none; }
+    .panel.collapsible > summary::before {
+      content: "▶"; font-size: 0.8rem; color: var(--muted);
+      transition: transform 0.15s ease;
+    }
+    .panel.collapsible[open] > summary::before { transform: rotate(90deg); }
+    .panel.collapsible[open] > summary { border-bottom: 1px solid var(--border); }
+    .panel.collapsible > summary .panel-title { margin: 0; }
+    .panel.collapsible > .panel-body { padding: 16px 20px 20px; }
+    .helpers-divider {
+      margin: 32px 0 12px; padding-top: 12px;
+      border-top: 1px dashed var(--border);
+      color: var(--muted); font-size: 0.78rem;
+      text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600;
+    }
+    .header-row {
+      display: flex; justify-content: space-between; align-items: flex-start;
+      gap: 16px; flex-wrap: wrap; margin-bottom: 8px;
+    }
+    .share-button {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 8px 14px; border-radius: 6px;
+      background: var(--accent); color: white;
+      text-decoration: none; font-size: 0.88rem; font-weight: 500;
+      border: none; cursor: pointer; white-space: nowrap;
+      box-shadow: 0 1px 3px rgba(0, 102, 204, 0.2);
+    }
+    .share-button:hover { background: #0055aa; }
+    .share-button:active { transform: translateY(1px); }
+
+    /* ---------- Mobile (phones) ---------- */
+    @media (max-width: 700px) {
+      .container { padding: 14px; }
+      h1 { font-size: 1.3rem; }
+      .sub { font-size: 0.85rem; }
+      .panel { padding: 14px; }
+      .panel-title { font-size: 0.98rem; }
+      .panel-title .hint { display: block; margin-left: 0; margin-top: 2px; font-size: 0.78rem; }
+      .header-row { flex-direction: column; gap: 12px; }
+      .share-button { align-self: flex-start; }
+      /* Tables: let them overflow horizontally with a swipe */
+      #breakdown, #cheapestResults, #ticketResults {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+      }
+      #breakdown table, #cheapestResults table, #ticketResults table {
+        min-width: 480px;
+      }
+      table { font-size: 0.85rem; }
+      th, td { padding: 6px 8px; }
+      /* Trip total: stack each line on tight screens */
+      .trip-line { grid-template-columns: 1fr auto; }
+      .trip-line .trip-line-label { grid-column: 1 / -1; }
+      .trip-line .trip-line-detail { grid-column: 1; }
+      .trip-line .trip-line-amount { grid-column: 2; align-self: end; }
+      .trip-line.trip-grand .trip-line-amount { font-size: 1.4rem; }
+      /* Dining rows: stack into 2 columns on phone */
+      .dining-row {
+        grid-template-columns: 24px 1fr;
+        grid-template-areas:
+          "check label"
+          ".     meal"
+          ".     total";
+        gap: 6px 12px;
+      }
+      .dining-row > input[type="checkbox"] { grid-area: check; align-self: start; margin-top: 4px; }
+      .dining-row > label { grid-area: label; }
+      .dining-row > select { grid-area: meal; max-width: 100%; }
+      .dining-row > .dining-rowTotal { grid-area: total; text-align: left; }
+      /* Ticket option cards: stack within each card */
+      .ticket-option {
+        flex-wrap: wrap;
+        align-items: flex-start;
+      }
+      .ticket-option-text { flex-basis: 100%; }
+      .ticket-option-price { flex-basis: 100%; text-align: left; }
+      .ticket-option-price .uct-link { display: inline-block; margin-top: 6px; }
+      /* Summary block */
+      .summary { gap: 12px; }
+      .summary .big { font-size: 1.6rem; }
+      .dvc-summary .dvc-amount { font-size: 1.25rem; }
+    }
+    .muted-hint { font-size: 0.78rem; color: var(--muted); margin-top: 4px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header-row">
+      <div>
+        <h1>WDW Trip Planner — Rack Rate Calculator</h1>
+        <p class="sub">2026 rack rates from <a href="https://www.mousesavers.com/2026-disney-world-room-rates-season-dates/" target="_blank" rel="noopener">mousesavers.com</a>. Tax already included.</p>
+      </div>
+      <button onclick="downloadShare()" class="share-button" title="Download a single-file copy you can email or share">
+        Download to share
+      </button>
+    </div>
+
+    <div class="panel">
+      <div class="grid">
+        <div>
+          <label for="resort">Resort</label>
+          <select id="resort"></select>
+        </div>
+        <div>
+          <label for="roomType">Room type</label>
+          <select id="roomType"></select>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2 class="panel-title">Plan a stay <span class="hint">— pick check-in &amp; check-out, see the total</span></h2>
+      <div class="grid">
+        <div>
+          <label for="checkIn">Check-in</label>
+          <input id="checkIn" type="date" value="2026-06-15">
+        </div>
+        <div>
+          <label for="checkOut">Check-out</label>
+          <input id="checkOut" type="date" value="2026-06-22">
+        </div>
+      </div>
+      <div id="summary" class="empty" style="margin-top: 16px;">Pick dates to see the total.</div>
+      <div id="breakdown"></div>
+      <div class="footnote" id="footnote"></div>
+      <div id="planDvcNote"></div>
+    </div>
+
+    <div class="panel">
+      <h2 class="panel-title">Park ticket calculator <span class="hint">— days sync from your hotel; pick Base / + Park Hopper / + Hopper Plus</span></h2>
+      <div class="grid">
+        <div>
+          <label for="ticketDays">Number of days</label>
+          <select id="ticketDays">
+            <option value="1">1 day</option>
+            <option value="2">2 days</option>
+            <option value="3">3 days</option>
+            <option value="4" selected>4 days</option>
+            <option value="5">5 days</option>
+            <option value="6">6 days</option>
+            <option value="7">7 days</option>
+            <option value="8">8 days</option>
+            <option value="9">9 days</option>
+            <option value="10">10 days</option>
+          </select>
+          <div id="ticketDaysHint" class="muted-hint"></div>
+        </div>
+        <div>
+          <label for="ticketAdults">Adults (10+)</label>
+          <input id="ticketAdults" type="number" min="0" max="20" value="2">
+        </div>
+        <div>
+          <label for="ticketChildren">Children (3-9)</label>
+          <input id="ticketChildren" type="number" min="0" max="20" value="2">
+        </div>
+      </div>
+      <div class="ticket-tier-row">
+        <span class="ticket-tier-label">Date tier:</span>
+        <span id="ticketTierStatus">Off-peak (no hotel check-in selected yet)</span>
+      </div>
+      <div class="ticket-options-grid">
+        <label class="ticket-option">
+          <input type="radio" name="ticketType" value="base" checked>
+          <div class="ticket-option-text">
+            <div class="ticket-option-label">Base</div>
+            <div class="ticket-option-desc">1 park per day</div>
+            <div class="uct-estimate" id="uctBase"></div>
+          </div>
+          <div class="ticket-option-price">
+            <strong id="priceBase">$0</strong>
+            <small>included</small>
+            <a class="uct-link" href="https://www.undercovertourist.com/orlando/walt-disney-world-resort/" target="_blank" rel="noopener" onclick="event.stopPropagation()">Get UCT quote ↗</a>
+          </div>
+        </label>
+        <label class="ticket-option">
+          <input type="radio" name="ticketType" value="hopper">
+          <div class="ticket-option-text">
+            <div class="ticket-option-label">+ Park Hopper</div>
+            <div class="ticket-option-desc">Multiple parks per day (after 11am)</div>
+            <div class="uct-estimate" id="uctHopper"></div>
+          </div>
+          <div class="ticket-option-price">
+            <strong id="priceHopper">$0</strong>
+            <small id="deltaHopper">+$0</small>
+            <a class="uct-link" href="https://www.undercovertourist.com/orlando/walt-disney-world-resort/" target="_blank" rel="noopener" onclick="event.stopPropagation()">Get UCT quote ↗</a>
+          </div>
+        </label>
+        <label class="ticket-option">
+          <input type="radio" name="ticketType" value="hopperPlus">
+          <div class="ticket-option-text">
+            <div class="ticket-option-label">+ Park Hopper Plus</div>
+            <div class="ticket-option-desc">Multi-park + water parks / Oak Trail mini golf</div>
+            <div class="uct-estimate" id="uctHopperPlus"></div>
+          </div>
+          <div class="ticket-option-price">
+            <strong id="priceHopperPlus">$0</strong>
+            <small id="deltaHopperPlus">+$0</small>
+            <a class="uct-link" href="https://www.undercovertourist.com/orlando/walt-disney-world-resort/" target="_blank" rel="noopener" onclick="event.stopPropagation()">Get UCT quote ↗</a>
+          </div>
+        </label>
+      </div>
+      <div class="footnote" style="margin-top: 12px;">
+        Source: mousesavers.com 2026 regular ticket grid. <strong>Prices include 6.5% Florida sales tax.</strong> Children 3-9 get the child price; under 3 free; 10+ pays adult. Gate-purchase prices for 3+ day tickets are $21.30 more each.<br>
+        <strong>6-tier interpolation:</strong> Disney prices tickets by date using ~6 tiers. Mousesavers publishes only the lowest (Tier 0) and highest (Tier 5); tiers in between are linearly interpolated. The 2026 date-to-tier mapping is hand-built from public knowledge and editable in <code>tickets.js</code> (<code>tierCalendar</code>). Verified against UCT for Nov 15, 2026: Tier 4 yields $2,854 vs UCT's $2,834 — within 1%.<br>
+        <strong>UCT estimate</strong> applies a typical ~4% discount for an authorized reseller (<a href="https://www.undercovertourist.com/" target="_blank" rel="noopener">Undercover Tourist</a>). Their actual quote varies by dates and current promos — click "Get UCT quote" for the real number. UCT estimate is informational; the trip total uses the Disney rack rate.
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2 class="panel-title">Food cost estimator <span class="hint">— check restaurants you'll book, pick the meal, see total per-person cost</span></h2>
+      <div class="grid">
+        <div>
+          <label for="adults">Adults (10+)</label>
+          <input id="adults" type="number" min="0" max="20" value="2">
+        </div>
+        <div>
+          <label for="children">Children (3-9)</label>
+          <input id="children" type="number" min="0" max="20" value="2">
+        </div>
+      </div>
+      <div class="dining-toggles">
+        <label><input type="checkbox" id="includeTax"> Include 6.5% sales tax</label>
+        <label><input type="checkbox" id="includeGratuity"> Include 20% gratuity</label>
+      </div>
+      <div id="diningList" style="margin-top: 16px;"></div>
+      <div id="diningTotal"></div>
+      <div class="footnote" style="margin-top: 12px;">
+        Per-row prices are the prix-fixe menu price (pre-tax, pre-gratuity). Toggles above add Florida sales tax (6.5%) and/or a 20% gratuity to the grand total. Children under 3 dine free. Source: minitravellers.co.uk 2026 character dining guide and disneyfoodblog.com.
+      </div>
+    </div>
+
+    <div class="panel trip-total-panel">
+      <h2 class="panel-title">Trip total <span class="hint">— sums hotel + tickets + dining based on your current selections</span></h2>
+      <div class="grid">
+        <div>
+          <label for="tripHotelChoice">Hotel pricing to include</label>
+          <select id="tripHotelChoice">
+            <option value="cash" selected>Cash rack rate</option>
+            <option value="dvc">DVC equivalent (Dave's est.)</option>
+            <option value="">Don't include hotel</option>
+          </select>
+        </div>
+      </div>
+      <p style="color: var(--muted); font-size: 0.85rem; margin: 12px 0 0;">
+        Tickets and dining come directly from your selections in the panels above — change them there to see the total update.
+      </p>
+      <div class="trip-lines">
+        <div class="trip-line">
+          <div class="trip-line-label">Hotel</div>
+          <div class="trip-line-detail" id="tripHotelDetail"><span class="empty-line">— pick resort, room, and dates above</span></div>
+          <div class="trip-line-amount" id="tripHotelAmount">$0</div>
+        </div>
+        <div class="trip-line">
+          <div class="trip-line-label">Tickets</div>
+          <div class="trip-line-detail" id="tripTicketDetail"><span class="empty-line">— pick days &amp; party size above</span></div>
+          <div class="trip-line-amount" id="tripTicketAmount">$0</div>
+        </div>
+        <div class="trip-line">
+          <div class="trip-line-label">Dining</div>
+          <div class="trip-line-detail" id="tripDiningDetail"><span class="empty-line">— check restaurants above</span></div>
+          <div class="trip-line-amount" id="tripDiningAmount">$0</div>
+        </div>
+        <div class="trip-line trip-grand">
+          <div class="trip-line-label">Grand total</div>
+          <div class="trip-line-detail"></div>
+          <div class="trip-line-amount" id="tripGrandAmount">$0</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="helpers-divider">Research helpers</div>
+
+    <details class="panel collapsible">
+      <summary>
+        <h2 class="panel-title">Find cheapest dates <span class="hint">— search across resorts and tiers; doesn't affect trip total</span></h2>
+      </summary>
+      <div class="panel-body">
+        <div class="grid">
+          <div>
+            <label for="cheapestTier">Resort tier</label>
+            <select id="cheapestTier">
+              <option value="">Any tier</option>
+              <option value="value">Value</option>
+              <option value="moderate">Moderate</option>
+              <option value="deluxe">Deluxe</option>
+              <option value="dvc">DVC (Villas)</option>
+            </select>
+          </div>
+          <div>
+            <label for="cheapestResort">Resort</label>
+            <select id="cheapestResort"></select>
+          </div>
+          <div>
+            <label for="nights">Number of nights</label>
+            <input id="nights" type="number" min="1" max="30" value="7">
+          </div>
+          <div>
+            <label for="seasonFilter">Season</label>
+            <select id="seasonFilter"></select>
+          </div>
+          <div>
+            <label for="topN">Show</label>
+            <select id="topN">
+              <option value="10">Top 10 cheapest</option>
+              <option value="20">Top 20 cheapest</option>
+              <option value="50">Top 50 cheapest</option>
+            </select>
+          </div>
+        </div>
+        <div id="cheapestResults" style="margin-top: 16px;"></div>
+        <div id="cheapestDvcNote"></div>
+      </div>
+    </details>
+  </div>
+  <script src="rates.js?v=16"></script>
+  <script src="dining.js?v=16"></script>
+  <script src="tickets.js?v=16"></script>
+  <script src="app.js?v=16"></script>
+</body>
+</html>
