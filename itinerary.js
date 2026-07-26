@@ -585,6 +585,10 @@ function b64urlEncode(str) {
     .replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
 
+// The published viewer. Used when the planner is opened from a local file so the
+// shared link still points at a URL that works on other people's devices.
+const LIVE_VIEW_URL = "https://babbishai.github.io/wdw-trip-planner/view.html";
+
 function buildShareLink() {
   const payload = {
     title: state.title,
@@ -592,7 +596,10 @@ function buildShareLink() {
     groupSel: state.groupSel,
     groupOff: state.groupOff,
   };
-  const base = new URL("view.html", location.href).href;
+  // On the live site, resolve view.html relative to here (survives repo renames).
+  // Opened from a local file, fall back to the published URL so the link is shareable.
+  const isWeb = location.protocol === "http:" || location.protocol === "https:";
+  const base = isWeb ? new URL("view.html", location.href).href : LIVE_VIEW_URL;
   return base + "#" + b64urlEncode(JSON.stringify(payload));
 }
 
