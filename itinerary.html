@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>WDW Trip Planner — Itinerary Builder</title>
+  <style>
+    :root {
+      --bg: #fafaf7;
+      --ink: #1d1d1f;
+      --muted: #6b6b6b;
+      --accent: #0066cc;
+      --border: #e3e3df;
+      --row-alt: #f3f3ee;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+      background: var(--bg);
+      color: var(--ink);
+      line-height: 1.45;
+    }
+    .container { max-width: 820px; margin: 0 auto; padding: 24px; }
+    h1 { font-size: 1.6rem; margin: 0 0 4px; }
+    .sub { color: var(--muted); margin: 0 0 20px; font-size: 0.92rem; }
+    .back { display: inline-block; margin-bottom: 12px; color: var(--accent); text-decoration: none; font-size: 0.9rem; }
+    .back:hover { text-decoration: underline; }
+    .panel {
+      background: white; border: 1px solid var(--border); border-radius: 10px;
+      padding: 20px; margin-bottom: 20px;
+    }
+    .panel-title { font-size: 1.05rem; margin: 0 0 14px; font-weight: 600; }
+    label { display: block; font-size: 0.85rem; color: var(--muted); margin-bottom: 4px; font-weight: 500; }
+    select, input[type="text"], input[type="number"] {
+      width: 100%; padding: 8px 10px; border: 1px solid var(--border);
+      border-radius: 6px; font-size: 0.95rem; background: white; color: var(--ink);
+    }
+    /* Add-item form */
+    .add-grid {
+      display: grid; gap: 12px;
+      grid-template-columns: 160px 1fr 130px;
+      align-items: end;
+    }
+    .add-grid .full { grid-column: 1 / -1; }
+    .optional-row {
+      display: flex; align-items: center; gap: 8px; margin-top: 12px;
+      font-size: 0.9rem; color: var(--ink);
+    }
+    .optional-row label { margin: 0; color: var(--ink); font-weight: 400; cursor: pointer; }
+    .optional-row input { width: auto; }
+    .add-btn {
+      margin-top: 14px;
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 9px 18px; border-radius: 6px;
+      background: var(--accent); color: white;
+      font-size: 0.92rem; font-weight: 500;
+      border: none; cursor: pointer;
+      box-shadow: 0 1px 3px rgba(0, 102, 204, 0.2);
+    }
+    .add-btn:hover { background: #0055aa; }
+    .add-btn:active { transform: translateY(1px); }
+    .field-hint { font-size: 0.78rem; color: var(--muted); margin-top: 6px; }
+
+    /* Itinerary list */
+    .area-heading {
+      font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.06em;
+      color: var(--muted); margin: 18px 0 6px; font-weight: 600;
+    }
+    .item-row {
+      display: grid; grid-template-columns: 26px 1fr auto auto;
+      gap: 12px; align-items: center; padding: 9px 6px;
+      border-bottom: 1px solid var(--border);
+    }
+    .item-row.excluded { opacity: 0.5; }
+    .item-row .item-check { width: auto; margin: 0; cursor: pointer; }
+    .item-row .fixed-dot {
+      width: 18px; text-align: center; color: var(--muted); font-size: 0.9rem;
+      cursor: default;
+    }
+    .item-title { font-weight: 500; }
+    .item-title .item-icon { margin-right: 6px; }
+    .item-type-label { color: var(--muted); font-size: 0.78rem; display: block; margin-left: 24px; }
+    .item-cost {
+      font-variant-numeric: tabular-nums; font-weight: 500; text-align: right;
+      white-space: nowrap;
+    }
+    .item-actions { display: flex; gap: 4px; }
+    .icon-btn {
+      background: none; border: 1px solid var(--border); border-radius: 5px;
+      padding: 4px 8px; cursor: pointer; color: var(--muted); font-size: 0.8rem;
+    }
+    .icon-btn:hover { background: var(--row-alt); color: var(--ink); }
+    .icon-btn.danger:hover { background: #fdecea; color: #a52314; border-color: #f3b6ac; }
+
+    .empty {
+      color: var(--muted); font-style: italic; padding: 24px 6px; text-align: center;
+    }
+
+    /* Total */
+    .total-panel {
+      background: linear-gradient(180deg, white, #f7f4ec);
+      border: 1px solid var(--border); border-top: 3px solid var(--accent);
+    }
+    .total-row {
+      display: flex; justify-content: space-between; align-items: baseline;
+      padding: 6px 0;
+    }
+    .total-row .label { color: var(--muted); font-size: 0.9rem; }
+    .total-row .val { font-variant-numeric: tabular-nums; }
+    .total-row.grand {
+      margin-top: 8px; padding-top: 14px; border-top: 2px solid var(--ink);
+    }
+    .total-row.grand .label { color: var(--ink); font-size: 1rem; font-weight: 600; }
+    .total-row.grand .val { font-size: 1.8rem; font-weight: 600; color: var(--accent); }
+    .total-note { color: var(--muted); font-size: 0.82rem; margin-top: 10px; }
+
+    @media (max-width: 640px) {
+      .container { padding: 14px; }
+      .add-grid { grid-template-columns: 1fr; }
+      .item-row { grid-template-columns: 26px 1fr auto; row-gap: 4px; }
+      .item-actions { grid-column: 2 / -1; justify-content: flex-end; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <a class="back" href="index.html">← Back to the cost calculator</a>
+    <h1>Itinerary Builder</h1>
+    <p class="sub">Add each piece of your trip — flights, stays, car rentals, reservations, tickets. Mark anything you're unsure about as optional, then check it on or off to watch the total change. Everything saves in your browser automatically.</p>
+
+    <div class="panel">
+      <h2 class="panel-title">Add an activity</h2>
+      <div class="add-grid">
+        <div>
+          <label for="itemType">Type</label>
+          <select id="itemType">
+            <option value="flight">✈️ Flight</option>
+            <option value="stay">🏨 Stay</option>
+            <option value="car">🚗 Car rental</option>
+            <option value="reservation">🍽️ Reservation</option>
+            <option value="ticket">🎟️ Ticket</option>
+            <option value="other">📌 Other</option>
+          </select>
+        </div>
+        <div>
+          <label for="itemTitle">Title</label>
+          <input id="itemTitle" type="text" placeholder="e.g. Southwest flight, Grand Floridian, Ohana dinner">
+        </div>
+        <div>
+          <label for="itemCost">Cost ($)</label>
+          <input id="itemCost" type="number" min="0" step="1" placeholder="0">
+        </div>
+      </div>
+      <div class="optional-row">
+        <input type="checkbox" id="itemOptional">
+        <label for="itemOptional">Optional — let me toggle this on and off in the total</label>
+      </div>
+      <button class="add-btn" id="addBtn" type="button">+ Add to itinerary</button>
+      <div class="field-hint">Optional items start out included. Uncheck one in the list to drop its cost from the total.</div>
+    </div>
+
+    <div class="panel">
+      <h2 class="panel-title">Your itinerary</h2>
+      <div id="itineraryList"></div>
+    </div>
+
+    <div class="panel total-panel">
+      <div class="total-row">
+        <span class="label">Committed (always counted)</span>
+        <span class="val" id="fixedTotal">$0</span>
+      </div>
+      <div class="total-row">
+        <span class="label">Optional items included</span>
+        <span class="val" id="optionalTotal">$0</span>
+      </div>
+      <div class="total-row grand">
+        <span class="label">Trip total</span>
+        <span class="val" id="grandTotal">$0</span>
+      </div>
+      <div class="total-note" id="totalNote"></div>
+    </div>
+  </div>
+  <script src="itinerary.js?v=1"></script>
+</body>
+</html>
