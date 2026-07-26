@@ -32,23 +32,43 @@
     }
     .panel-title { font-size: 1.05rem; margin: 0 0 14px; font-weight: 600; }
     label { display: block; font-size: 0.85rem; color: var(--muted); margin-bottom: 4px; font-weight: 500; }
-    select, input[type="text"], input[type="number"] {
+    select, input[type="text"], input[type="number"], input[type="date"] {
       width: 100%; padding: 8px 10px; border: 1px solid var(--border);
       border-radius: 6px; font-size: 0.95rem; background: white; color: var(--ink);
     }
+
+    /* Itinerary title */
+    .title-input {
+      font-size: 1.4rem; font-weight: 600; padding: 6px 10px;
+      border: 1px solid transparent; border-radius: 8px; background: transparent;
+      width: 100%; color: var(--ink);
+    }
+    .title-input:hover { border-color: var(--border); }
+    .title-input:focus { border-color: var(--accent); background: white; outline: none; }
+
     /* Add-item form */
     .add-grid {
       display: grid; gap: 12px;
-      grid-template-columns: 160px 1fr 130px;
+      grid-template-columns: 150px 1fr 110px;
       align-items: end;
     }
-    .add-grid .full { grid-column: 1 / -1; }
-    .optional-row {
-      display: flex; align-items: center; gap: 8px; margin-top: 12px;
-      font-size: 0.9rem; color: var(--ink);
+    .date-range-cell { grid-column: 1 / -1; }
+    .date-range { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .date-range input { width: auto; flex: 0 1 190px; }
+    .date-range .arrow { color: var(--muted); }
+    .count-modes {
+      margin-top: 14px; padding: 12px 14px; background: var(--row-alt); border-radius: 8px;
     }
-    .optional-row label { margin: 0; color: var(--ink); font-weight: 400; cursor: pointer; }
-    .optional-row input { width: auto; }
+    .count-modes > .cm-label { font-size: 0.85rem; color: var(--muted); font-weight: 500; margin-bottom: 8px; }
+    .cm-options { display: flex; flex-wrap: wrap; gap: 8px 20px; align-items: center; }
+    .cm-options label {
+      display: inline-flex; align-items: center; gap: 6px; margin: 0;
+      color: var(--ink); font-weight: 400; cursor: pointer; font-size: 0.9rem;
+    }
+    .cm-options input[type="radio"] { width: auto; }
+    #groupNameWrap { display: none; align-items: center; gap: 6px; }
+    #groupNameWrap.show { display: inline-flex; }
+    #groupName { width: 180px; padding: 5px 8px; font-size: 0.88rem; }
     .add-btn {
       margin-top: 14px;
       display: inline-flex; align-items: center; gap: 6px;
@@ -60,7 +80,15 @@
     }
     .add-btn:hover { background: #0055aa; }
     .add-btn:active { transform: translateY(1px); }
-    .field-hint { font-size: 0.78rem; color: var(--muted); margin-top: 6px; }
+    .field-hint { font-size: 0.78rem; color: var(--muted); margin-top: 8px; }
+
+    /* List controls */
+    .list-controls {
+      display: flex; justify-content: space-between; align-items: center;
+      flex-wrap: wrap; gap: 10px; margin-bottom: 6px;
+    }
+    .sort-control { display: inline-flex; align-items: center; gap: 8px; font-size: 0.88rem; color: var(--muted); }
+    .sort-control select { width: auto; padding: 5px 8px; font-size: 0.88rem; }
 
     /* Itinerary list */
     .area-heading {
@@ -75,15 +103,40 @@
     .item-row.excluded { opacity: 0.5; }
     .item-row .item-check { width: auto; margin: 0; cursor: pointer; }
     .item-row .fixed-dot {
-      width: 18px; text-align: center; color: var(--muted); font-size: 0.9rem;
-      cursor: default;
+      width: 18px; text-align: center; color: var(--muted); font-size: 0.9rem; cursor: default;
     }
+    .item-main { min-width: 0; }
     .item-title { font-weight: 500; }
     .item-title .item-icon { margin-right: 6px; }
-    .item-type-label { color: var(--muted); font-size: 0.78rem; display: block; margin-left: 24px; }
+    .item-sub { color: var(--muted); font-size: 0.78rem; display: block; margin-left: 24px; }
+    .group-badge {
+      display: inline-block; margin-left: 6px; padding: 1px 7px; border-radius: 10px;
+      background: #e8e4f3; color: #4a2e8a; font-size: 0.72rem; font-weight: 500;
+      vertical-align: middle;
+    }
+    /* Choice-group card */
+    .group-card {
+      border: 1px solid #d9d2ef; border-radius: 9px; padding: 10px 12px;
+      margin: 10px 0; background: #faf9fd;
+    }
+    .group-card.off { opacity: 0.6; }
+    .gc-header {
+      display: flex; justify-content: space-between; align-items: center;
+      gap: 10px; flex-wrap: wrap; margin-bottom: 2px;
+    }
+    .gc-title { font-weight: 600; color: #3a2a6b; }
+    .gc-title .gc-icon { margin-right: 6px; }
+    .gc-meta { color: var(--muted); font-size: 0.8rem; font-weight: 400; margin-left: 8px; }
+    .gc-include {
+      display: inline-flex; align-items: center; gap: 6px;
+      font-size: 0.85rem; color: var(--ink); cursor: pointer; margin: 0; font-weight: 500;
+    }
+    .gc-include input { width: auto; }
+    .group-card .item-row { padding-left: 4px; padding-right: 4px; }
+    .group-card .item-row:last-child { border-bottom: none; }
+    .item-date { color: var(--muted); }
     .item-cost {
-      font-variant-numeric: tabular-nums; font-weight: 500; text-align: right;
-      white-space: nowrap;
+      font-variant-numeric: tabular-nums; font-weight: 500; text-align: right; white-space: nowrap;
     }
     .item-actions { display: flex; gap: 4px; }
     .icon-btn {
@@ -93,24 +146,30 @@
     .icon-btn:hover { background: var(--row-alt); color: var(--ink); }
     .icon-btn.danger:hover { background: #fdecea; color: #a52314; border-color: #f3b6ac; }
 
-    .empty {
-      color: var(--muted); font-style: italic; padding: 24px 6px; text-align: center;
+    /* Inline edit row */
+    .item-row.edit-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+    .item-row.edit-row input { width: auto; }
+    .edit-title { flex: 1 1 200px; min-width: 160px; }
+    .edit-date { width: 150px; }
+    .edit-row .arrow { color: var(--muted); }
+    .edit-cost { width: 100px; }
+    .edit-save {
+      background: var(--accent); color: white; border: none; border-radius: 5px;
+      padding: 7px 14px; font-size: 0.85rem; font-weight: 500; cursor: pointer;
     }
+    .edit-save:hover { background: #0055aa; }
+
+    .empty { color: var(--muted); font-style: italic; padding: 24px 6px; text-align: center; }
 
     /* Total */
     .total-panel {
       background: linear-gradient(180deg, white, #f7f4ec);
       border: 1px solid var(--border); border-top: 3px solid var(--accent);
     }
-    .total-row {
-      display: flex; justify-content: space-between; align-items: baseline;
-      padding: 6px 0;
-    }
+    .total-row { display: flex; justify-content: space-between; align-items: baseline; padding: 6px 0; }
     .total-row .label { color: var(--muted); font-size: 0.9rem; }
     .total-row .val { font-variant-numeric: tabular-nums; }
-    .total-row.grand {
-      margin-top: 8px; padding-top: 14px; border-top: 2px solid var(--ink);
-    }
+    .total-row.grand { margin-top: 8px; padding-top: 14px; border-top: 2px solid var(--ink); }
     .total-row.grand .label { color: var(--ink); font-size: 1rem; font-weight: 600; }
     .total-row.grand .val { font-size: 1.8rem; font-weight: 600; color: var(--accent); }
     .total-note { color: var(--muted); font-size: 0.82rem; margin-top: 10px; }
@@ -126,8 +185,8 @@
 <body>
   <div class="container">
     <a class="back" href="index.html">← Back to the cost calculator</a>
-    <h1>Itinerary Builder</h1>
-    <p class="sub">Add each piece of your trip — flights, stays, car rentals, reservations, tickets. Mark anything you're unsure about as optional, then check it on or off to watch the total change. Everything saves in your browser automatically.</p>
+    <input class="title-input" id="itineraryTitle" type="text" placeholder="Name your trip…" aria-label="Itinerary title">
+    <p class="sub">Add each piece of your trip. Give it a date if you know it, and choose how it counts — always in, an optional toggle, or one choice among a group (like picking between hotels). Everything saves in your browser automatically.</p>
 
     <div class="panel">
       <h2 class="panel-title">Add an activity</h2>
@@ -145,35 +204,55 @@
         </div>
         <div>
           <label for="itemTitle">Title</label>
-          <input id="itemTitle" type="text" placeholder="e.g. Southwest flight, Grand Floridian, Ohana dinner">
+          <input id="itemTitle" type="text" placeholder="e.g. Southwest flight, Grand Floridian">
         </div>
         <div>
           <label for="itemCost">Cost ($)</label>
           <input id="itemCost" type="number" min="0" step="1" placeholder="0">
         </div>
+        <div class="date-range-cell">
+          <label for="itemDate">Dates <span style="font-weight:400">(optional — leave the end blank for a single day)</span></label>
+          <div class="date-range">
+            <input id="itemDate" type="date" aria-label="Start date">
+            <span class="arrow">→</span>
+            <input id="itemEndDate" type="date" aria-label="End date">
+          </div>
+        </div>
       </div>
-      <div class="optional-row">
-        <input type="checkbox" id="itemOptional">
-        <label for="itemOptional">Optional — let me toggle this on and off in the total</label>
+
+      <div class="count-modes">
+        <div class="cm-label">How should this count toward the total?</div>
+        <div class="cm-options">
+          <label><input type="radio" name="countMode" value="always" checked> Always include</label>
+          <label><input type="radio" name="countMode" value="optional"> Optional — toggle on/off</label>
+          <label><input type="radio" name="countMode" value="group"> One of a group</label>
+          <span id="groupNameWrap">
+            <input id="groupName" type="text" list="groupList" placeholder="group name, e.g. Hotel">
+            <datalist id="groupList"></datalist>
+          </span>
+        </div>
       </div>
+
       <button class="add-btn" id="addBtn" type="button">+ Add to itinerary</button>
-      <div class="field-hint">Optional items start out included. Uncheck one in the list to drop its cost from the total.</div>
+      <div class="field-hint">A <strong>group</strong> lets you list alternatives (say, three hotels) and pick one — only the selected option counts, and one is always chosen.</div>
     </div>
 
     <div class="panel">
-      <h2 class="panel-title">Your itinerary</h2>
+      <div class="list-controls">
+        <h2 class="panel-title" style="margin:0;">Your itinerary</h2>
+        <span class="sort-control">
+          <label for="sortMode" style="margin:0;">Sort:</label>
+          <select id="sortMode">
+            <option value="type">Group by type</option>
+            <option value="date">By date</option>
+          </select>
+        </span>
+      </div>
       <div id="itineraryList"></div>
     </div>
 
     <div class="panel total-panel">
-      <div class="total-row">
-        <span class="label">Committed (always counted)</span>
-        <span class="val" id="fixedTotal">$0</span>
-      </div>
-      <div class="total-row">
-        <span class="label">Optional items included</span>
-        <span class="val" id="optionalTotal">$0</span>
-      </div>
+      <div id="totalLines"></div>
       <div class="total-row grand">
         <span class="label">Trip total</span>
         <span class="val" id="grandTotal">$0</span>
@@ -181,6 +260,6 @@
       <div class="total-note" id="totalNote"></div>
     </div>
   </div>
-  <script src="itinerary.js?v=1"></script>
+  <script src="itinerary.js?v=8"></script>
 </body>
 </html>
