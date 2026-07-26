@@ -46,10 +46,37 @@
     .title-input:hover { border-color: var(--border); }
     .title-input:focus { border-color: var(--accent); background: white; outline: none; }
 
+    /* Share-with-group */
+    .share-bar { margin: 0 0 20px; }
+    .share-btn {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 9px 16px; border-radius: 6px; background: var(--accent); color: white;
+      font-size: 0.9rem; font-weight: 500; border: none; cursor: pointer;
+      box-shadow: 0 1px 3px rgba(0, 102, 204, 0.2);
+    }
+    .share-btn:hover { background: #0055aa; }
+    .share-btn:active { transform: translateY(1px); }
+    .share-box {
+      margin-top: 12px; padding: 14px; background: white;
+      border: 1px solid var(--border); border-radius: 8px;
+    }
+    .share-box label { display: block; margin-bottom: 8px; color: var(--ink); font-weight: 500; }
+    .share-row { display: flex; gap: 8px; }
+    .share-row input {
+      flex: 1; padding: 8px 10px; border: 1px solid var(--border);
+      border-radius: 6px; font-size: 0.85rem; background: var(--row-alt); color: var(--ink);
+    }
+    .copy-btn {
+      padding: 8px 14px; border-radius: 6px; border: 1px solid var(--accent);
+      background: white; color: var(--accent); font-weight: 500; cursor: pointer; white-space: nowrap;
+    }
+    .copy-btn:hover { background: #f0f7ff; }
+    .copy-msg { margin-top: 8px; font-size: 0.82rem; color: #1f5c34; min-height: 1em; }
+
     /* Add-item form */
     .add-grid {
       display: grid; gap: 12px;
-      grid-template-columns: 150px 1fr 110px;
+      grid-template-columns: 140px 1fr 100px 92px;
       align-items: end;
     }
     .date-range-cell { grid-column: 1 / -1; }
@@ -138,6 +165,7 @@
     .item-cost {
       font-variant-numeric: tabular-nums; font-weight: 500; text-align: right; white-space: nowrap;
     }
+    .item-cost .per-person { display: block; font-size: 0.74rem; color: var(--muted); font-weight: 400; margin-top: 1px; }
     .item-actions { display: flex; gap: 4px; }
     .icon-btn {
       background: none; border: 1px solid var(--border); border-radius: 5px;
@@ -153,6 +181,7 @@
     .edit-date { width: 150px; }
     .edit-row .arrow { color: var(--muted); }
     .edit-cost { width: 100px; }
+    .edit-people { width: 80px; }
     .edit-save {
       background: var(--accent); color: white; border: none; border-radius: 5px;
       padding: 7px 14px; font-size: 0.85rem; font-weight: 500; cursor: pointer;
@@ -188,6 +217,18 @@
     <input class="title-input" id="itineraryTitle" type="text" placeholder="Name your trip…" aria-label="Itinerary title">
     <p class="sub">Add each piece of your trip. Give it a date if you know it, and choose how it counts — always in, an optional toggle, or one choice among a group (like picking between hotels). Everything saves in your browser automatically.</p>
 
+    <div class="share-bar">
+      <button class="share-btn" id="shareBtn" type="button">🔗 Share with your group</button>
+      <div class="share-box" id="shareBox" hidden>
+        <label for="shareLink">Send this link — it opens a view-only version where they pick from your options:</label>
+        <div class="share-row">
+          <input id="shareLink" type="text" readonly onclick="this.select()">
+          <button class="copy-btn" id="copyLink" type="button">Copy</button>
+        </div>
+        <div class="copy-msg" id="copyMsg"></div>
+      </div>
+    </div>
+
     <div class="panel">
       <h2 class="panel-title">Add an activity</h2>
       <div class="add-grid">
@@ -209,6 +250,10 @@
         <div>
           <label for="itemCost">Cost ($)</label>
           <input id="itemCost" type="number" min="0" step="1" placeholder="0">
+        </div>
+        <div>
+          <label for="itemPeople"># People</label>
+          <input id="itemPeople" type="number" min="0" step="1" placeholder="—">
         </div>
         <div class="date-range-cell">
           <label for="itemDate">Dates <span style="font-weight:400">(optional — leave the end blank for a single day)</span></label>
@@ -260,6 +305,6 @@
       <div class="total-note" id="totalNote"></div>
     </div>
   </div>
-  <script src="itinerary.js?v=8"></script>
+  <script src="itinerary.js?v=10"></script>
 </body>
 </html>

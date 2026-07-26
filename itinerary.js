@@ -20,6 +20,11 @@ function fmtDateRange(start, end) {
   if (end && end > start) return `${fmtDate(start)} → ${fmtDate(end)}`;
   return fmtDate(start);
 }
+// Per-person amount string, or "" when it wouldn't add information (0/1 person, or free).
+function perPersonText(cost, people) {
+  if (!people || people <= 1 || !cost) return "";
+  return `${fmtUSD(Math.round(cost / people))}/person`;
+}
 
 // type key -> { icon, label } for display and grouping.
 const TYPES = {
@@ -38,7 +43,7 @@ const TYPE_ORDER = ["flight", "stay", "car", "reservation", "ticket", "other"];
 // (contributes $0) while remembering the selection for when it's turned back on.
 // lastDate/lastEndDate remember the most recently entered range so new items default
 // to the same timeframe — this keeps the calendar opening on the trip's months.
-let state = { title: "", sort: "type", items: [], groupSel: {}, groupOff: {}, lastDate: "", lastEndDate: "" };
+let state = { title: "", sort: "type", items: [], groupSel: {}, groupOff: {}, lastDate: "", lastEndDate: "", lastPeople: "" };
 
 // Id of the item currently being edited inline (null when none).
 let editingId = null;
@@ -48,7 +53,7 @@ function load() {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return;
     const parsed = JSON.parse(raw);
-    const defaults = { title: "", sort: "type", items: [], groupSel: {}, groupOff: {}, lastDate: "", lastEndDate: "" };
+    const defaults = { title: "", sort: "type", items: [], groupSel: {}, groupOff: {}, lastDate: "", lastEndDate: "", lastPeople: "" };
     if (Array.isArray(parsed)) {
       // Migrate v1 format (bare items array) into the state object.
       state = Object.assign(defaults, { items: parsed });
@@ -59,6 +64,7 @@ function load() {
     for (const it of state.items) {
       if (typeof it.date !== "string") it.date = "";
       if (typeof it.endDate !== "string") it.endDate = "";
+      if (typeof it.people !== "number") it.people = 0; // 0 = unspecified
       if (typeof it.group !== "string") it.group = "";
       if (typeof it.optional !== "boolean") it.optional = false;
       if (typeof it.included !== "boolean") it.included = true;
@@ -178,6 +184,7 @@ function addItem() {
   const type = $("itemType").value;
   const title = $("itemTitle").value.trim();
   const cost = Math.max(0, parseFloat($("itemCost").value) || 0);
+  const people = Math.max(0, parseInt($("itemPeople").value, 10) || 0);
   let date = $("itemDate").value || "";
   let endDate = $("itemEndDate").value || "";
   const mode = currentMode();
@@ -195,15 +202,16 @@ function addItem() {
 
   const item = {
     id: "i" + Date.now() + Math.floor(Math.random() * 1000),
-    type, title, cost, date, endDate,
+    type, title, cost, people, date, endDate,
     optional: mode === "optional",
     included: true,
     group,
   };
   state.items.push(item);
-  // Remember this range so the next item — and its calendar — defaults to the same timeframe.
+  // Remember these so the next item defaults to the same timeframe and party size.
   state.lastDate = date;
   state.lastEndDate = endDate;
+  state.lastPeople = people ? String(people) : "";
   ensureGroupSelections();
   save();
   render();
@@ -212,6 +220,7 @@ function addItem() {
   // several activities around the same days doesn't mean re-navigating the calendar.
   $("itemTitle").value = "";
   $("itemCost").value = "";
+  $("itemPeople").value = people ? String(people) : "";
   $("itemDate").value = date;
   $("itemEndDate").value = endDate;
   syncEndMin();
@@ -253,10 +262,12 @@ function saveEdit(id) {
   if (!item) { editingId = null; render(); return; }
   const title = document.querySelector(".edit-row .edit-title").value.trim();
   const cost = document.querySelector(".edit-row .edit-cost").value;
+  const people = document.querySelector(".edit-row .edit-people").value;
   const date = document.querySelector(".edit-row .edit-start").value;
   const endDate = document.querySelector(".edit-row .edit-end").value;
   if (title) item.title = title;
   item.cost = Math.max(0, parseFloat(cost) || 0);
+  item.people = Math.max(0, parseInt(people, 10) || 0);
   if (item.group) {
     // Grouped items share one range — apply the edit to every member.
     setGroupDates(item.group, date || "", endDate || "");
@@ -302,6 +313,15 @@ function buildEditRow(item) {
   costInput.step = "1";
   costInput.value = item.cost;
 
+  const peopleInput = document.createElement("input");
+  peopleInput.type = "number";
+  peopleInput.className = "edit-people";
+  peopleInput.min = "0";
+  peopleInput.step = "1";
+  peopleInput.placeholder = "# ppl";
+  peopleInput.title = "How many people this is for";
+  peopleInput.value = item.people ? String(item.people) : "";
+
   const saveBtn = document.createElement("button");
   saveBtn.className = "edit-save";
   saveBtn.textContent = "Save";
@@ -313,14 +333,14 @@ function buildEditRow(item) {
   cancelBtn.addEventListener("click", cancelEdit);
 
   // Enter saves, Escape cancels, from any field.
-  for (const inp of [titleInput, dateInput, endInput, costInput]) {
+  for (const inp of [titleInput, dateInput, endInput, costInput, peopleInput]) {
     inp.addEventListener("keydown", (e) => {
       if (e.key === "Enter") { e.preventDefault(); saveEdit(item.id); }
       else if (e.key === "Escape") { e.preventDefault(); cancelEdit(); }
     });
   }
 
-  row.append(titleInput, dateInput, arrow, endInput, costInput, saveBtn, cancelBtn);
+  row.append(titleInput, dateInput, arrow, endInput, costInput, peopleInput, saveBtn, cancelBtn);
   return row;
 }
 
@@ -366,13 +386,15 @@ function buildRow(item) {
     const dateText = fmtDateRange(item.date, item.endDate);
     if (dateText) subParts.push(`<span class="item-date">${dateText}</span>`);
   }
+  if (item.people) subParts.push(`for ${item.people}`);
   main.innerHTML =
     `<span class="item-title"><span class="item-icon">${meta.icon}</span>${escapeHTML(item.title)}</span>` +
     `<span class="item-sub">${subParts.join(" · ")}</span>`;
 
   const costCell = document.createElement("div");
   costCell.className = "item-cost";
-  costCell.textContent = fmtUSD(item.cost);
+  const perPerson = perPersonText(item.cost, item.people);
+  costCell.innerHTML = fmtUSD(item.cost) + (perPerson ? `<span class="per-person">${perPerson}</span>` : "");
 
   const actions = document.createElement("div");
   actions.className = "item-actions";
@@ -556,6 +578,58 @@ function renderTotals() {
   $("totalNote").textContent = note;
 }
 
+// --- Sharing --------------------------------------------------------------
+// Encode the plan into the URL of a view-only page so it can be sent as a link.
+function b64urlEncode(str) {
+  return btoa(unescape(encodeURIComponent(str)))
+    .replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+function buildShareLink() {
+  const payload = {
+    title: state.title,
+    items: state.items,
+    groupSel: state.groupSel,
+    groupOff: state.groupOff,
+  };
+  const base = new URL("view.html", location.href).href;
+  return base + "#" + b64urlEncode(JSON.stringify(payload));
+}
+
+function showShareLink() {
+  if (state.items.length === 0) {
+    $("shareBox").hidden = false;
+    $("shareLink").value = "";
+    $("copyMsg").textContent = "Add at least one activity before sharing.";
+    return;
+  }
+  const link = buildShareLink();
+  $("shareBox").hidden = false;
+  $("shareLink").value = link;
+  $("shareLink").select();
+  $("copyMsg").textContent = "";
+  // Try to copy automatically; fall back to manual selection if blocked.
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(link)
+      .then(() => { $("copyMsg").textContent = "Link copied to your clipboard — paste it to whoever you're planning for."; })
+      .catch(() => { $("copyMsg").textContent = "Select the link above and copy it (Ctrl+C)."; });
+  } else {
+    $("copyMsg").textContent = "Select the link above and copy it (Ctrl+C).";
+  }
+}
+
+function copyShareLink() {
+  const el = $("shareLink");
+  if (!el.value) return;
+  el.select();
+  const done = () => { $("copyMsg").textContent = "Copied!"; };
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(el.value).then(done).catch(() => { try { document.execCommand("copy"); done(); } catch (e) {} });
+  } else {
+    try { document.execCommand("copy"); done(); } catch (e) {}
+  }
+}
+
 function init() {
   load();
 
@@ -569,12 +643,13 @@ function init() {
   const anchor = state.lastDate || datedStarts[0] || "";
   if (anchor) $("itemDate").value = anchor;
   if (state.lastEndDate) $("itemEndDate").value = state.lastEndDate;
+  if (state.lastPeople) $("itemPeople").value = state.lastPeople;
   syncEndMin();
 
   render();
 
   $("addBtn").addEventListener("click", addItem);
-  for (const id of ["itemTitle", "itemCost", "groupName"]) {
+  for (const id of ["itemTitle", "itemCost", "itemPeople", "groupName"]) {
     $(id).addEventListener("keydown", (e) => {
       if (e.key === "Enter") { e.preventDefault(); addItem(); }
     });
@@ -596,6 +671,9 @@ function init() {
     save();
     render();
   });
+
+  $("shareBtn").addEventListener("click", showShareLink);
+  $("copyLink").addEventListener("click", copyShareLink);
 }
 
 init();
