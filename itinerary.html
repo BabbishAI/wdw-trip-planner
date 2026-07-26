@@ -56,6 +56,11 @@
     }
     .share-btn:hover { background: #0055aa; }
     .share-btn:active { transform: translateY(1px); }
+    .share-btn.secondary {
+      background: white; color: var(--accent);
+      border: 1px solid var(--accent); box-shadow: none; margin-left: 8px;
+    }
+    .share-btn.secondary:hover { background: #f0f7ff; }
     .share-box {
       margin-top: 12px; padding: 14px; background: white;
       border: 1px solid var(--border); border-radius: 8px;
@@ -219,8 +224,9 @@
 
     <div class="share-bar">
       <button class="share-btn" id="shareBtn" type="button">🔗 Share with your group</button>
+      <button class="share-btn secondary" id="moveBtn" type="button">📤 Copy editable link</button>
       <div class="share-box" id="shareBox" hidden>
-        <label for="shareLink">Send this link — it opens a view-only version where they pick from your options:</label>
+        <label for="shareLink" id="shareBoxLabel">Send this link — it opens a view-only version where they pick from your options:</label>
         <div class="share-row">
           <input id="shareLink" type="text" readonly onclick="this.select()">
           <button class="copy-btn" id="copyLink" type="button">Copy</button>
@@ -305,6 +311,6 @@
       <div class="total-note" id="totalNote"></div>
     </div>
   </div>
-  <script src="itinerary.js?v=11"></script>
+  <script src="itinerary.js?v=12"></script>
 </body>
 </html>

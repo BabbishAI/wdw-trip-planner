@@ -584,45 +584,72 @@ function b64urlEncode(str) {
   return btoa(unescape(encodeURIComponent(str)))
     .replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
+function b64urlDecode(s) {
+  s = s.replace(/-/g, "+").replace(/_/g, "/");
+  while (s.length % 4) s += "=";
+  return decodeURIComponent(escape(atob(s)));
+}
 
-// The published viewer. Used when the planner is opened from a local file so the
-// shared link still points at a URL that works on other people's devices.
+// The published pages. Used when the planner is opened from a local file so links
+// still point at URLs that work on other people's devices.
 const LIVE_VIEW_URL = "https://babbishai.github.io/wdw-trip-planner/view.html";
+const LIVE_BUILDER_URL = "https://babbishai.github.io/wdw-trip-planner/itinerary.html";
 
-function buildShareLink() {
-  const payload = {
+function currentPayload() {
+  return {
     title: state.title,
     items: state.items,
     groupSel: state.groupSel,
     groupOff: state.groupOff,
   };
-  // On the live site, resolve view.html relative to here (survives repo renames).
-  // Opened from a local file, fall back to the published URL so the link is shareable.
-  const isWeb = location.protocol === "http:" || location.protocol === "https:";
-  const base = isWeb ? new URL("view.html", location.href).href : LIVE_VIEW_URL;
-  return base + "#" + b64urlEncode(JSON.stringify(payload));
 }
 
-function showShareLink() {
+// A link to a published page (view or builder) carrying the whole plan in its hash.
+// On the live site, resolve relative to here; from a local file, use the published URL.
+function buildLink(fileName, liveUrl) {
+  const isWeb = location.protocol === "http:" || location.protocol === "https:";
+  const base = isWeb ? new URL(fileName, location.href).href : liveUrl;
+  return base + "#" + b64urlEncode(JSON.stringify(currentPayload()));
+}
+
+function buildShareLink() { return buildLink("view.html", LIVE_VIEW_URL); }
+function buildMoveLink() { return buildLink("itinerary.html", LIVE_BUILDER_URL); }
+
+function presentLink(link, label, copiedMsg) {
+  $("shareBoxLabel").textContent = label;
+  $("shareBox").hidden = false;
   if (state.items.length === 0) {
-    $("shareBox").hidden = false;
     $("shareLink").value = "";
-    $("copyMsg").textContent = "Add at least one activity before sharing.";
+    $("copyMsg").textContent = "Add at least one activity first.";
     return;
   }
-  const link = buildShareLink();
-  $("shareBox").hidden = false;
   $("shareLink").value = link;
   $("shareLink").select();
   $("copyMsg").textContent = "";
   // Try to copy automatically; fall back to manual selection if blocked.
   if (navigator.clipboard && navigator.clipboard.writeText) {
     navigator.clipboard.writeText(link)
-      .then(() => { $("copyMsg").textContent = "Link copied to your clipboard — paste it to whoever you're planning for."; })
+      .then(() => { $("copyMsg").textContent = copiedMsg; })
       .catch(() => { $("copyMsg").textContent = "Select the link above and copy it (Ctrl+C)."; });
   } else {
     $("copyMsg").textContent = "Select the link above and copy it (Ctrl+C).";
   }
+}
+
+function showShareLink() {
+  presentLink(
+    buildShareLink(),
+    "Send this link — it opens a view-only version where they pick from your options:",
+    "Link copied — paste it to whoever you're planning for."
+  );
+}
+
+function showMoveLink() {
+  presentLink(
+    buildMoveLink(),
+    "Open this link on the published site (or any device) to load this plan into that builder, where you can keep editing it:",
+    "Editable link copied — open it on the published site to load your plan there."
+  );
 }
 
 function copyShareLink() {
@@ -637,8 +664,50 @@ function copyShareLink() {
   }
 }
 
+// If the page was opened with a plan in the URL hash (an "editable link"), offer to
+// load it into this builder. Runs after load() so we can warn about overwriting.
+function maybeImportFromHash() {
+  const hash = location.hash.replace(/^#/, "");
+  if (!hash) return;
+  let payload;
+  try { payload = JSON.parse(b64urlDecode(hash)); } catch (e) { return; }
+  if (!payload || !Array.isArray(payload.items)) return;
+
+  // Always clear the hash so a later refresh doesn't re-prompt.
+  const clearHash = () => history.replaceState(null, "", location.pathname + location.search);
+
+  const incoming = payload.title ? `"${payload.title}"` : "this shared plan";
+  const question = state.items.length > 0
+    ? `Load ${incoming} into this builder?\n\nThis REPLACES the ${state.items.length} item(s) currently here. (Tip: use "Copy editable link" first if you want to keep the current one.)`
+    : `Load ${incoming} into this builder?`;
+
+  if (!window.confirm(question)) { clearHash(); return; }
+
+  state = Object.assign(
+    { title: "", sort: "type", items: [], groupSel: {}, groupOff: {}, lastDate: "", lastEndDate: "", lastPeople: "" },
+    {
+      title: payload.title || "",
+      items: payload.items || [],
+      groupSel: payload.groupSel || {},
+      groupOff: payload.groupOff || {},
+    }
+  );
+  // Backfill any per-item fields the payload might not carry.
+  for (const it of state.items) {
+    if (typeof it.date !== "string") it.date = "";
+    if (typeof it.endDate !== "string") it.endDate = "";
+    if (typeof it.people !== "number") it.people = 0;
+    if (typeof it.group !== "string") it.group = "";
+    if (typeof it.optional !== "boolean") it.optional = false;
+    if (typeof it.included !== "boolean") it.included = true;
+  }
+  save();
+  clearHash();
+}
+
 function init() {
   load();
+  maybeImportFromHash();
 
   $("itineraryTitle").value = state.title || "";
   if (state.title) document.title = state.title + " — Itinerary";
@@ -680,6 +749,7 @@ function init() {
   });
 
   $("shareBtn").addEventListener("click", showShareLink);
+  $("moveBtn").addEventListener("click", showMoveLink);
   $("copyLink").addEventListener("click", copyShareLink);
 }
 
