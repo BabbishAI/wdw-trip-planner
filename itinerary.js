@@ -671,36 +671,22 @@ function publishedBase(fileName, liveUrl) {
   return isWeb ? new URL(fileName, location.href).href : liveUrl;
 }
 
-// Short, STABLE view link backed by the cloud id (contents live in Supabase).
+// Short, STABLE links backed by the cloud id (contents live in Supabase).
 function viewLinkFor(id) {
   return publishedBase("view.html", LIVE_VIEW_URL) + "?id=" + encodeURIComponent(id);
 }
-
-// The "editable link" still carries the whole plan in its hash — used to move an
-// editable copy into another builder/device, independent of cloud publishing.
-function buildMoveLink() {
-  return publishedBase("itinerary.html", LIVE_BUILDER_URL) + "#" + b64urlEncode(JSON.stringify(currentPayload()));
+function editLinkFor(id) {
+  return publishedBase("itinerary.html", LIVE_BUILDER_URL) + "?id=" + encodeURIComponent(id);
 }
 
-function presentLink(link, label, copiedMsg) {
-  $("shareBoxLabel").textContent = label;
-  $("shareBox").hidden = false;
-  if (state.items.length === 0) {
-    $("shareLink").value = "";
-    $("copyMsg").textContent = "Add at least one activity first.";
-    return;
-  }
-  $("shareLink").value = link;
-  $("shareLink").select();
-  $("copyMsg").textContent = "";
-  // Try to copy automatically; fall back to manual selection if blocked.
-  if (navigator.clipboard && navigator.clipboard.writeText) {
-    navigator.clipboard.writeText(link)
-      .then(() => { $("copyMsg").textContent = copiedMsg; })
-      .catch(() => { $("copyMsg").textContent = "Select the link above and copy it (Ctrl+C)."; });
-  } else {
-    $("copyMsg").textContent = "Select the link above and copy it (Ctrl+C).";
-  }
+async function cloudFetch(id) {
+  const res = await fetch(SUPABASE.url + "/rpc/get_plan", {
+    method: "POST",
+    headers: sbHeaders(),
+    body: JSON.stringify({ pid: id }),
+  });
+  if (!res.ok) throw new Error("cloud load failed: " + res.status);
+  return res.json(); // stored plan object, or null
 }
 
 function copyToClipboard(text) {
@@ -710,9 +696,19 @@ function copyToClipboard(text) {
   return Promise.reject();
 }
 
-// Publish the plan to the cloud under a stable id and show its short, permanent link.
-async function publishShare() {
-  $("shareBoxLabel").textContent = "Anyone with this link can view your itinerary. It stays the same and updates automatically as you edit:";
+// Ensure the plan exists in the cloud under a stable id, and return that id.
+async function ensurePublished() {
+  if (!state.cloudId) state.cloudId = newId();
+  await cloudSave(state.cloudId, currentPayload());
+  state.published = true;
+  save(); // persist cloudId + published
+  setSyncStatus("synced");
+  return state.cloudId;
+}
+
+// Show a cloud-backed link in the share box: publish (if needed), then present + copy.
+async function presentCloudLink(label, linkFor, copiedMsg, workingMsg) {
+  $("shareBoxLabel").textContent = label;
   $("shareBox").hidden = false;
   if (state.items.length === 0) {
     $("shareLink").value = "";
@@ -720,32 +716,41 @@ async function publishShare() {
     return;
   }
   if (!SUPABASE.url) {
+    $("shareLink").value = "";
     $("copyMsg").textContent = "Cloud storage isn't configured.";
     return;
   }
-  if (!state.cloudId) state.cloudId = newId();
-  const link = viewLinkFor(state.cloudId);
-  $("shareLink").value = link;
-  $("copyMsg").textContent = "Publishing…";
+  $("copyMsg").textContent = workingMsg;
   try {
-    await cloudSave(state.cloudId, currentPayload());
-    state.published = true;
-    save(); // persist cloudId + published
-    setSyncStatus("synced");
+    const id = await ensurePublished();
+    const link = linkFor(id);
+    $("shareLink").value = link;
     $("shareLink").select();
     copyToClipboard(link)
-      .then(() => { $("copyMsg").textContent = "Published & link copied — it stays the same and always shows your latest changes."; })
-      .catch(() => { $("copyMsg").textContent = "Published! Select the link above and copy it (Ctrl+C)."; });
+      .then(() => { $("copyMsg").textContent = copiedMsg; })
+      .catch(() => { $("copyMsg").textContent = "Ready! Select the link above and copy it (Ctrl+C)."; });
   } catch (e) {
-    $("copyMsg").textContent = "Couldn't publish — check your connection and try again.";
+    $("copyMsg").textContent = "Couldn't reach the cloud — check your connection and try again.";
   }
 }
 
-function showMoveLink() {
-  presentLink(
-    buildMoveLink(),
-    "Open this link on the published site (or any device) to load this plan into that builder, where you can keep editing it:",
-    "Editable link copied — open it on the published site to load your plan there."
+// View-only link for the group.
+function publishShare() {
+  return presentCloudLink(
+    "Anyone with this link can view your itinerary. It stays the same and updates automatically as you edit:",
+    viewLinkFor,
+    "Published & link copied — it stays the same and always shows your latest changes.",
+    "Publishing…"
+  );
+}
+
+// Short link that loads this plan into the builder on another device to keep editing.
+function showEditLink() {
+  return presentCloudLink(
+    "Open this link in a builder on any device to keep editing this same itinerary (edits sync to the same shared link):",
+    editLinkFor,
+    "Edit link copied — open it where you want to edit (e.g. the published site).",
+    "Preparing…"
   );
 }
 
@@ -802,9 +807,62 @@ function maybeImportFromHash() {
   clearHash();
 }
 
-function init() {
+// If opened as itinerary.html?id=XXX, load that cloud plan into the builder to edit.
+// Adopts the cloud id so further edits sync back to the same shared link.
+async function maybeLoadFromCloud() {
+  const id = new URLSearchParams(location.search).get("id");
+  if (!id || !SUPABASE.url) return;
+  const clearId = () => history.replaceState(null, "", location.pathname);
+
+  // Already editing this exact plan here — nothing to load.
+  if (state.cloudId === id) { clearId(); return; }
+
+  let data;
+  try {
+    data = await cloudFetch(id);
+  } catch (e) {
+    window.alert("Couldn't load that itinerary — it may be waking up. Try the link again in a moment.");
+    return;
+  }
+  if (!data || !Array.isArray(data.items)) {
+    window.alert("That link's itinerary couldn't be found.");
+    clearId();
+    return;
+  }
+
+  const incoming = data.title ? `"${data.title}"` : "this itinerary";
+  const proceed = state.items.length === 0
+    ? true
+    : window.confirm(`Load ${incoming} here to edit?\n\nThis replaces the ${state.items.length} item(s) currently in this builder.`);
+  if (!proceed) { clearId(); return; }
+
+  state = Object.assign(
+    { title: "", sort: "type", items: [], groupSel: {}, groupOff: {}, lastDate: "", lastEndDate: "", lastPeople: "", cloudId: "", published: false },
+    {
+      title: data.title || "",
+      items: data.items || [],
+      groupSel: data.groupSel || {},
+      groupOff: data.groupOff || {},
+      cloudId: id,        // adopt the id so edits sync to the same link
+      published: true,
+    }
+  );
+  for (const it of state.items) {
+    if (typeof it.date !== "string") it.date = "";
+    if (typeof it.endDate !== "string") it.endDate = "";
+    if (typeof it.people !== "number") it.people = 0;
+    if (typeof it.group !== "string") it.group = "";
+    if (typeof it.optional !== "boolean") it.optional = false;
+    if (typeof it.included !== "boolean") it.included = true;
+  }
+  save();
+  clearId();
+}
+
+async function init() {
   load();
   maybeImportFromHash();
+  await maybeLoadFromCloud();
 
   $("itineraryTitle").value = state.title || "";
   if (state.title) document.title = state.title + " — Itinerary";
@@ -846,7 +904,7 @@ function init() {
   });
 
   $("shareBtn").addEventListener("click", publishShare);
-  $("moveBtn").addEventListener("click", showMoveLink);
+  $("moveBtn").addEventListener("click", showEditLink);
   $("copyLink").addEventListener("click", copyShareLink);
 
   // If this plan was already published, keep its link current from the moment it loads.
