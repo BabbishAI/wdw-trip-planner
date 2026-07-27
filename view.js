@@ -4,6 +4,23 @@
 
 const $ = (sel) => document.querySelector(sel);
 
+const SUPABASE = window.SUPABASE || {};
+
+// Fetch a plan by id via the get_plan() function (reads are limited to exact-id lookups).
+async function cloudFetch(id) {
+  const res = await fetch(SUPABASE.url + "/rpc/get_plan", {
+    method: "POST",
+    headers: {
+      "apikey": SUPABASE.anon,
+      "Authorization": "Bearer " + SUPABASE.anon,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ pid: id }),
+  });
+  if (!res.ok) throw new Error("load failed: " + res.status);
+  return res.json(); // the stored plan object, or null if the id isn't found
+}
+
 function fmtUSD(n) {
   return n.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
 }
@@ -271,14 +288,16 @@ function render() {
 function renderEmpty() {
   $("#viewRoot").innerHTML =
     '<div class="empty"><h1 style="font-size:1.3rem;">No itinerary found</h1>' +
-    "<p>This link doesn't contain a shared plan. Ask whoever sent it to share the link again, " +
+    "<p>This link doesn't point to a shared plan. Ask whoever sent it to share the link again, " +
     'or <a href="itinerary.html">build your own itinerary</a>.</p></div>';
 }
 
-function init() {
-  plan = readPayload();
+function renderMessage(html) {
+  $("#viewRoot").innerHTML = '<div class="empty">' + html + "</div>";
+}
+
+function startPlan() {
   if (!plan || !Array.isArray(plan.items)) { renderEmpty(); return; }
-  // Backfill any missing per-item fields defensively.
   for (const it of plan.items) {
     it.date = it.date || "";
     it.endDate = it.endDate || "";
@@ -287,6 +306,28 @@ function init() {
   }
   initSelections();
   render();
+}
+
+async function init() {
+  const id = new URLSearchParams(location.search).get("id");
+  if (id) {
+    renderMessage("Loading itinerary…");
+    try {
+      plan = await cloudFetch(id);
+    } catch (e) {
+      renderMessage(
+        '<h1 style="font-size:1.3rem;">Couldn\'t load this itinerary</h1>' +
+        "<p>The plan couldn't be reached right now. It may be waking up — wait a moment and refresh. " +
+        "If it keeps failing, ask the planner to re-share the link.</p>"
+      );
+      return;
+    }
+    startPlan();
+  } else {
+    // Legacy links that carry the whole plan in the hash.
+    plan = readPayload();
+    startPlan();
+  }
 }
 
 init();

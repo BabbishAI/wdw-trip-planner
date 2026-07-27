@@ -43,7 +43,9 @@ const TYPE_ORDER = ["flight", "stay", "car", "reservation", "ticket", "other"];
 // (contributes $0) while remembering the selection for when it's turned back on.
 // lastDate/lastEndDate remember the most recently entered range so new items default
 // to the same timeframe — this keeps the calendar opening on the trip's months.
-let state = { title: "", sort: "type", items: [], groupSel: {}, groupOff: {}, lastDate: "", lastEndDate: "", lastPeople: "" };
+let state = { title: "", sort: "type", items: [], groupSel: {}, groupOff: {}, lastDate: "", lastEndDate: "", lastPeople: "", cloudId: "", published: false };
+
+const SUPABASE = window.SUPABASE || {};
 
 // Id of the item currently being edited inline (null when none).
 let editingId = null;
@@ -53,7 +55,7 @@ function load() {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return;
     const parsed = JSON.parse(raw);
-    const defaults = { title: "", sort: "type", items: [], groupSel: {}, groupOff: {}, lastDate: "", lastEndDate: "", lastPeople: "" };
+    const defaults = { title: "", sort: "type", items: [], groupSel: {}, groupOff: {}, lastDate: "", lastEndDate: "", lastPeople: "", cloudId: "", published: false };
     if (Array.isArray(parsed)) {
       // Migrate v1 format (bare items array) into the state object.
       state = Object.assign(defaults, { items: parsed });
@@ -80,6 +82,65 @@ function save() {
   } catch (e) {
     // Storage full or blocked (e.g. private mode) — the app still works this session.
   }
+  scheduleCloudSync();
+}
+
+// --- Cloud sync (Supabase) ------------------------------------------------
+let syncTimer = null;
+
+function sbHeaders(extra) {
+  return Object.assign({
+    "apikey": SUPABASE.anon,
+    "Authorization": "Bearer " + SUPABASE.anon,
+    "Content-Type": "application/json",
+  }, extra || {});
+}
+
+// Short, hard-to-guess id so a link reveals only that one plan.
+function newId() {
+  const bytes = new Uint8Array(8);
+  (window.crypto || window.msCrypto).getRandomValues(bytes);
+  let s = "";
+  for (const b of bytes) s += b.toString(36);
+  s = s.replace(/[^a-z0-9]/g, "");
+  return (s + "0000000000").slice(0, 10);
+}
+
+// Save via the save_plan() function (insert-or-update, runs with elevated rights so
+// it isn't blocked by the table's locked-down policies).
+async function cloudSave(id, payload) {
+  const res = await fetch(SUPABASE.url + "/rpc/save_plan", {
+    method: "POST",
+    headers: sbHeaders(),
+    body: JSON.stringify({ pid: id, payload: payload }),
+  });
+  if (!res.ok) throw new Error("cloud save failed: " + res.status);
+}
+
+function setSyncStatus(kind) {
+  const el = $("syncStatus");
+  if (!el) return;
+  const map = {
+    saving: ["Saving…", "muted"],
+    synced: ["Shared link updated ✓", "ok"],
+    error: ["Couldn't sync — will retry on your next change", "err"],
+    "": ["", ""],
+  };
+  const [txt, cls] = map[kind] || ["", ""];
+  el.textContent = txt;
+  el.className = "sync-status " + cls;
+}
+
+// Once a plan is published, push edits to the cloud (debounced) so its link stays current.
+function scheduleCloudSync() {
+  if (!(state.published && state.cloudId && SUPABASE.url)) return;
+  setSyncStatus("saving");
+  clearTimeout(syncTimer);
+  syncTimer = setTimeout(() => {
+    cloudSave(state.cloudId, currentPayload())
+      .then(() => setSyncStatus("synced"))
+      .catch(() => setSyncStatus("error"));
+  }, 1200);
 }
 
 // Ordered list of distinct group names, by first appearance.
@@ -604,16 +665,22 @@ function currentPayload() {
   };
 }
 
-// A link to a published page (view or builder) carrying the whole plan in its hash.
-// On the live site, resolve relative to here; from a local file, use the published URL.
-function buildLink(fileName, liveUrl) {
+// Resolve a published page URL: relative on the live site, absolute from a local file.
+function publishedBase(fileName, liveUrl) {
   const isWeb = location.protocol === "http:" || location.protocol === "https:";
-  const base = isWeb ? new URL(fileName, location.href).href : liveUrl;
-  return base + "#" + b64urlEncode(JSON.stringify(currentPayload()));
+  return isWeb ? new URL(fileName, location.href).href : liveUrl;
 }
 
-function buildShareLink() { return buildLink("view.html", LIVE_VIEW_URL); }
-function buildMoveLink() { return buildLink("itinerary.html", LIVE_BUILDER_URL); }
+// Short, STABLE view link backed by the cloud id (contents live in Supabase).
+function viewLinkFor(id) {
+  return publishedBase("view.html", LIVE_VIEW_URL) + "?id=" + encodeURIComponent(id);
+}
+
+// The "editable link" still carries the whole plan in its hash — used to move an
+// editable copy into another builder/device, independent of cloud publishing.
+function buildMoveLink() {
+  return publishedBase("itinerary.html", LIVE_BUILDER_URL) + "#" + b64urlEncode(JSON.stringify(currentPayload()));
+}
 
 function presentLink(link, label, copiedMsg) {
   $("shareBoxLabel").textContent = label;
@@ -636,12 +703,42 @@ function presentLink(link, label, copiedMsg) {
   }
 }
 
-function showShareLink() {
-  presentLink(
-    buildShareLink(),
-    "Send this link — it opens a view-only version where they pick from your options:",
-    "Link copied — paste it to whoever you're planning for."
-  );
+function copyToClipboard(text) {
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    return navigator.clipboard.writeText(text);
+  }
+  return Promise.reject();
+}
+
+// Publish the plan to the cloud under a stable id and show its short, permanent link.
+async function publishShare() {
+  $("shareBoxLabel").textContent = "Anyone with this link can view your itinerary. It stays the same and updates automatically as you edit:";
+  $("shareBox").hidden = false;
+  if (state.items.length === 0) {
+    $("shareLink").value = "";
+    $("copyMsg").textContent = "Add at least one activity first.";
+    return;
+  }
+  if (!SUPABASE.url) {
+    $("copyMsg").textContent = "Cloud storage isn't configured.";
+    return;
+  }
+  if (!state.cloudId) state.cloudId = newId();
+  const link = viewLinkFor(state.cloudId);
+  $("shareLink").value = link;
+  $("copyMsg").textContent = "Publishing…";
+  try {
+    await cloudSave(state.cloudId, currentPayload());
+    state.published = true;
+    save(); // persist cloudId + published
+    setSyncStatus("synced");
+    $("shareLink").select();
+    copyToClipboard(link)
+      .then(() => { $("copyMsg").textContent = "Published & link copied — it stays the same and always shows your latest changes."; })
+      .catch(() => { $("copyMsg").textContent = "Published! Select the link above and copy it (Ctrl+C)."; });
+  } catch (e) {
+    $("copyMsg").textContent = "Couldn't publish — check your connection and try again.";
+  }
 }
 
 function showMoveLink() {
@@ -684,7 +781,7 @@ function maybeImportFromHash() {
   if (!window.confirm(question)) { clearHash(); return; }
 
   state = Object.assign(
-    { title: "", sort: "type", items: [], groupSel: {}, groupOff: {}, lastDate: "", lastEndDate: "", lastPeople: "" },
+    { title: "", sort: "type", items: [], groupSel: {}, groupOff: {}, lastDate: "", lastEndDate: "", lastPeople: "", cloudId: "", published: false },
     {
       title: payload.title || "",
       items: payload.items || [],
@@ -748,9 +845,12 @@ function init() {
     render();
   });
 
-  $("shareBtn").addEventListener("click", showShareLink);
+  $("shareBtn").addEventListener("click", publishShare);
   $("moveBtn").addEventListener("click", showMoveLink);
   $("copyLink").addEventListener("click", copyShareLink);
+
+  // If this plan was already published, keep its link current from the moment it loads.
+  if (state.published && state.cloudId) setSyncStatus("synced");
 }
 
 init();
