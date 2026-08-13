@@ -311,6 +311,10 @@ function startPlan() {
 async function init() {
   const id = new URLSearchParams(location.search).get("id");
   if (id) {
+    // Baked-in plans are served instantly and never depend on the cloud DB.
+    const local = (window.LOCAL_PLANS || {})[id];
+    if (local) { plan = local; startPlan(); return; }
+
     renderMessage("Loading itinerary…");
     try {
       plan = await cloudFetch(id);
