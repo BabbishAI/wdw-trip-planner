@@ -142,6 +142,14 @@
     .v-link { display: inline-block; margin-top: 6px; font-size: 0.8rem; color: #1b5fa8; }
     .v-notes { margin-top: 6px; font-size: 0.8rem; color: #5a6475; line-height: 1.5;
       white-space: pre-wrap; }
+    .v-notes-wrap { margin-top: 6px; }
+    .v-notes-wrap > summary { list-style: none; cursor: pointer; font-size: 0.8rem;
+      color: #5a6475; line-height: 1.5; }
+    .v-notes-wrap > summary::-webkit-details-marker { display: none; }
+    .v-notes-wrap > summary::after { content: " more"; color: #1b5fa8; font-weight: 600; font-size: 0.74rem; }
+    .v-notes-wrap[open] > summary::after { content: " less"; }
+    .v-notes-wrap[open] > summary { color: #98a0ad; }
+    .v-notes-wrap > .v-notes { margin-top: 4px; }
     .v-split { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 7px;
       padding-top: 7px; border-top: 1px dashed #e6e9ef; font-size: 0.78rem; color: #5a6475; }
     .v-shr .n { color: #98a0ad; }
@@ -164,6 +172,6 @@
   <script src="config.js?v=2"></script>
   <script src="booking.js?v=3"></script>
   <script src="plans.js?v=1"></script>
-  <script src="view.js?v=8"></script>
+  <script src="view.js?v=9"></script>
 </body>
 </html>

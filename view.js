@@ -194,12 +194,7 @@ function buildItemDetail(item) {
     wrap.appendChild(a);
   }
 
-  if (item.notes) {
-    const n = document.createElement("div");
-    n.className = "v-notes";
-    n.textContent = item.notes;
-    wrap.appendChild(n);
-  }
+  if (item.notes) wrap.appendChild(buildNotes(item.notes));
 
   // What this one booking costs each household.
   const houses = Booking.households(plan);
@@ -217,6 +212,45 @@ function buildItemDetail(item) {
   }
 
   return wrap;
+}
+
+// Notes carry the useful detail — addresses, door codes, why a decision was made —
+// but printed in full they bury the itinerary. Lead with the first sentence and let
+// people open the rest. Short notes render plainly, with nothing to click.
+function buildNotes(text) {
+  const full = String(text).trim();
+  const lead = firstSentence(full);
+
+  if (lead.length >= full.length) {
+    const n = document.createElement("div");
+    n.className = "v-notes";
+    n.textContent = full;
+    return n;
+  }
+
+  const det = document.createElement("details");
+  det.className = "v-notes-wrap";
+  const sum = document.createElement("summary");
+  sum.className = "v-notes-lead";
+  sum.textContent = lead;
+  const rest = document.createElement("div");
+  rest.className = "v-notes";
+  rest.textContent = full;
+  det.append(sum, rest);
+  return det;
+}
+
+// First sentence, or a clean word-boundary trim if that first sentence is itself long.
+function firstSentence(text) {
+  const MAX = 90;
+  const m = text.match(/^[\s\S]*?[.!?](?=\s|$)/);
+  let lead = m ? m[0].trim() : text;
+  if (lead.length > MAX) {
+    const cut = lead.slice(0, MAX);
+    const sp = cut.lastIndexOf(" ");
+    lead = (sp > 40 ? cut.slice(0, sp) : cut).trim() + "\u2026";
+  }
+  return lead;
 }
 
 // Clipboard fallback for browsers that block the async clipboard API.
