@@ -108,14 +108,14 @@ function initSelections() {
 // --- Totals ---------------------------------------------------------------
 function costOf(id) {
   const it = plan.items.find((x) => x.id === id);
-  return it ? Booking.effCost(it) : 0;
+  return it ? Booking.effCost(plan, it) : 0;
 }
 function computeTotal() {
   let total = 0;
   for (const it of plan.items) {
     if (it.group) continue; // groups handled below
-    if (it.optional) { if (vInc[it.id]) total += Booking.effCost(it); }
-    else total += Booking.effCost(it);
+    if (it.optional) { if (vInc[it.id]) total += Booking.effCost(plan, it); }
+    else total += Booking.effCost(plan, it);
   }
   for (const name of groupNames()) {
     if (vSel[name]) total += costOf(vSel[name]);
@@ -297,16 +297,24 @@ function buildItemRow(item) {
 
   const cost = document.createElement("div");
   cost.className = "v-cost";
-  const eff = Booking.effCost(item);
-  const perPerson = perPersonText(eff, item.people);
+  const eff = Booking.effCost(plan, item);
+  const units = Booking.unitsFor(plan, item);
+  const mode = Booking.priceMode(item);
   let costHTML = fmtUSD(eff);
+  if (mode !== "total" && units > 1) {
+    const what = mode === "person" ? "people" : "families";
+    costHTML += `<span class="v-perperson">${fmtUSD(Booking.unitPrice(item))} \u00d7 ${units} ${what}</span>`;
+  } else {
+    const perPerson = perPersonText(eff, item.people);
+    if (perPerson) costHTML += `<span class="v-perperson">${perPerson}</span>`;
+  }
   if (Booking.hasActual(item)) {
-    const v = Booking.variance(item);
-    if (Math.abs(v) >= 1) {
-      costHTML += `<span class="v-var ${v > 0 ? "over" : "under"}">${v > 0 ? "+" : "\u2212"}${fmtUSD(Math.abs(v))} vs est</span>`;
+    const dv = Booking.variance(plan, item);
+    if (Math.abs(dv) >= 1) {
+      costHTML += `<span class="v-var ${dv > 0 ? "over" : "under"}">${dv > 0 ? "+" : "\u2212"}${fmtUSD(Math.abs(dv))} vs est</span>`;
     }
   }
-  cost.innerHTML = costHTML + (perPerson ? `<span class="v-perperson">${perPerson}</span>` : "");
+  cost.innerHTML = costHTML;
 
   main.appendChild(buildItemDetail(item));
 

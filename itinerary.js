@@ -76,6 +76,7 @@ function load() {
       if (typeof it.notes !== "string") it.notes = "";
       if (typeof it.url !== "string") it.url = "";
       if (!Array.isArray(it.shares)) it.shares = [];  // empty = split across everyone
+      if (typeof it.priceMode !== "string") it.priceMode = "total";
       if (typeof it.group !== "string") it.group = "";
       if (typeof it.optional !== "boolean") it.optional = false;
       if (typeof it.included !== "boolean") it.included = true;
@@ -277,7 +278,7 @@ function addItem() {
     included: true,
     group,
     // Everything starts as an estimate; booking details get filled in once it's real.
-    actual: null, status: "est", conf: "", vendor: "", payer: "", notes: "", url: "", shares: [],
+    actual: null, status: "est", conf: "", vendor: "", payer: "", notes: "", url: "", shares: [], priceMode: "total",
   };
   state.items.push(item);
   // Remember these so the next item defaults to the same timeframe and party size.
@@ -472,16 +473,24 @@ function buildRow(item) {
 
   const costCell = document.createElement("div");
   costCell.className = "item-cost";
-  const eff = Booking.effCost(item);
-  const perPerson = perPersonText(eff, item.people);
+  const eff = Booking.effCost(state, item);
+  const units = Booking.unitsFor(state, item);
+  const mode = Booking.priceMode(item);
   let costHTML = fmtUSD(eff);
-  if (Booking.hasActual(item)) {
-    // Real money has landed — say how it compares with what we guessed.
-    const v = Booking.variance(item);
-    if (Math.abs(v) < 1) costHTML += '<span class="var on">on estimate</span>';
-    else costHTML += `<span class="var ${v > 0 ? "over" : "under"}">${v > 0 ? "+" : "\u2212"}${fmtUSD(Math.abs(v))} vs ${fmtUSD(item.cost || 0)} est</span>`;
+  // For a scaled price, show the arithmetic rather than a bare total.
+  if (mode !== "total" && units > 1) {
+    const what = mode === "person" ? (units === 1 ? "person" : "people") : (units === 1 ? "family" : "families");
+    costHTML += `<span class="per-person">${fmtUSD(Booking.unitPrice(item))} \u00d7 ${units} ${what}</span>`;
+  } else {
+    const perPerson = perPersonText(eff, item.people);
+    if (perPerson) costHTML += `<span class="per-person">${perPerson}</span>`;
   }
-  costCell.innerHTML = costHTML + (perPerson ? `<span class="per-person">${perPerson}</span>` : "");
+  if (Booking.hasActual(item)) {
+    const v = Booking.variance(state, item);
+    if (Math.abs(v) < 1) costHTML += '<span class="var on">on estimate</span>';
+    else costHTML += `<span class="var ${v > 0 ? "over" : "under"}">${v > 0 ? "+" : "\u2212"}${fmtUSD(Math.abs(v))} vs est</span>`;
+  }
+  costCell.innerHTML = costHTML;
 
   const actions = document.createElement("div");
   actions.className = "item-actions";
@@ -590,6 +599,23 @@ function buildBookingPanel(item) {
     return w;
   }
 
+  // How the price was quoted — decides whether it scales with the group.
+  const modeWrap = field("Price is");
+  const modeSel = document.createElement("select");
+  for (const key of Booking.PRICE_ORDER) {
+    const o = document.createElement("option");
+    o.value = key;
+    o.textContent = Booking.PRICE_MODES[key].label;
+    o.selected = Booking.priceMode(item) === key;
+    modeSel.appendChild(o);
+  }
+  modeSel.addEventListener("change", commit(() => { item.priceMode = modeSel.value; }));
+  modeWrap.appendChild(modeSel);
+  const modeNote = document.createElement("div");
+  modeNote.className = "bk-note";
+  modeNote.textContent = Booking.PRICE_MODES[Booking.priceMode(item)].hint;
+  modeWrap.appendChild(modeNote);
+
   // Status — where this sits between "we think" and "money has left the account".
   const statusWrap = field("Status");
   const statusSel = document.createElement("select");
@@ -604,7 +630,10 @@ function buildBookingPanel(item) {
   statusWrap.appendChild(statusSel);
 
   // Actual charged — blank means this is still just an estimate.
-  const actualWrap = field("Actual charged", "blank = still an estimate");
+  const unitLabel = Booking.PRICE_MODES[Booking.priceMode(item)].unit;
+  const actualWrap = field(
+    "Actual charged" + (unitLabel ? " (" + unitLabel + ")" : ""),
+    "blank = still an estimate");
   const actualInput = document.createElement("input");
   actualInput.type = "number";
   actualInput.min = "0";
@@ -649,6 +678,7 @@ function buildBookingPanel(item) {
   payerWrap.appendChild(payerSel);
 
   panel.append(
+    modeWrap,
     statusWrap,
     actualWrap,
     textField("Confirmation #", "conf", "e.g. HMKQ4X2B"),
@@ -846,7 +876,7 @@ function renderTotals() {
   let fixed = 0, choices = 0, optionalInc = 0;
   let optionalCount = 0, optionalOn = 0;
   for (const item of state.items) {
-    const c = Booking.effCost(item);
+    const c = Booking.effCost(state, item);
     if (item.group) {
       if (isCounted(item)) choices += c;
     } else if (item.optional) {
@@ -887,7 +917,7 @@ function renderTotals() {
 function renderReality(counted) {
   const box = $("realityBox");
   if (!box) return;
-  const r = Booking.rollup(counted);
+  const r = Booking.rollup(state, counted);
   if (counted.length === 0) { box.innerHTML = ""; return; }
 
   const pct = r.eff > 0 ? Math.round((r.locked / r.eff) * 100) : 0;

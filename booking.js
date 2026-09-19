@@ -24,14 +24,48 @@ window.Booking = (function () {
   function hasActual(item) {
     return item && typeof item.actual === "number" && isFinite(item.actual);
   }
-  // The number that should drive every total: real money when we have it, estimate until then.
-  function effCost(item) {
+
+  // How a price was quoted. This is the difference between "the house is $6,780" and
+  // "park tickets are $236 each" — the second has to grow and shrink with the group.
+  const PRICE_MODES = {
+    total:  { label: "Total for the trip", unit: "",            hint: "One flat price, however many people are in." },
+    person: { label: "Per person",         unit: "per person",  hint: "Multiplied by everyone in the participating families." },
+    family: { label: "Per family",         unit: "per family",  hint: "Multiplied by the number of families taking part." },
+  };
+  const PRICE_ORDER = ["total", "person", "family"];
+
+  function priceMode(item) {
+    return item && PRICE_MODES[item.priceMode] ? item.priceMode : "total";
+  }
+
+  // How many units the quoted price is charged for, given who is actually in.
+  function unitsFor(state, item) {
+    const mode = priceMode(item);
+    if (mode === "total") return 1;
+    const sharers = sharersFor(state, item);
+    if (mode === "family") return sharers.length || 1;
+    const heads = sharers.reduce((n, h) => n + headsOf(h), 0);
+    // Before any families are entered, fall back to the item's own head count.
+    return heads > 0 ? heads : Math.max(1, (item && item.people) || 1);
+  }
+
+  // The quoted price itself — real money once known, estimate until then. For a
+  // per-person or per-family item this is the RATE, not the bill.
+  function unitPrice(item) {
     if (!item) return 0;
     return hasActual(item) ? item.actual : (item.cost || 0);
   }
-  // Positive = came in over the estimate. Zero when nothing real has landed yet.
-  function variance(item) {
-    return hasActual(item) ? item.actual - (item.cost || 0) : 0;
+
+  // What this line actually costs the trip: the rate times however many units apply.
+  function effCost(state, item) {
+    if (!item) return 0;
+    return unitPrice(item) * unitsFor(state, item);
+  }
+
+  // Positive = came in over the estimate, scaled the same way as the total.
+  function variance(state, item) {
+    if (!hasActual(item)) return 0;
+    return (item.actual - (item.cost || 0)) * unitsFor(state, item);
   }
 
   function households(state) {
@@ -124,7 +158,26 @@ window.Booking = (function () {
     const out = {};
     const sharers = sharersFor(state, item);
     if (!sharers.length) return out;
-    const cost = effCost(item);
+    const cost = effCost(state, item);
+    const mode = priceMode(item);
+
+    // A quoted rate allocates by the thing it was quoted per, NOT by the trip-wide
+    // share rule. "$400 per family" has to bill every family $400 — pooling it and
+    // re-splitting by shares would quietly charge a two-person household less than
+    // the price it was quoted. Only a flat total falls to the trip share basis.
+    if (mode === "family") {
+      const each = cost / sharers.length;
+      for (const h of sharers) out[h.id] = each;
+      return out;
+    }
+    if (mode === "person") {
+      const heads = sharers.reduce((n, h) => n + headsOf(h), 0);
+      if (heads > 0) {
+        for (const h of sharers) out[h.id] = cost * (headsOf(h) / heads);
+        return out;
+      }
+    }
+
     const total = sharers.reduce((n, h) => n + weightOf(state, h), 0);
     // No weights to go on (nobody sized yet, or an adults-only basis with no adults
     // listed) — fall back to an even split rather than dividing by zero.
@@ -159,7 +212,7 @@ window.Booking = (function () {
         rows[hid].owes += split[hid];
         if (funded) rows[hid].owesFunded += split[hid];
       }
-      if (funded) rows[item.payer].paid += effCost(item);
+      if (funded) rows[item.payer].paid += effCost(state, item);
     }
     for (const id of Object.keys(rows)) rows[id].net = rows[id].paid - rows[id].owesFunded;
     return Object.keys(rows).map((id) => rows[id]);
@@ -170,7 +223,7 @@ window.Booking = (function () {
     let total = 0;
     const byId = new Set(households(state).map((h) => h.id));
     for (const item of countedItems) {
-      if (!item.payer || !byId.has(item.payer)) total += effCost(item);
+      if (!item.payer || !byId.has(item.payer)) total += effCost(state, item);
     }
     return total;
   }
@@ -198,20 +251,23 @@ window.Booking = (function () {
   }
 
   // Trip-level estimate-vs-reality rollup for the summary bar.
-  function rollup(countedItems) {
+  function rollup(state, countedItems) {
     let est = 0, eff = 0, locked = 0, open = 0, nLocked = 0, nOpen = 0;
     for (const it of countedItems) {
-      est += it.cost || 0;
-      eff += effCost(it);
-      if (hasActual(it)) { locked += it.actual; nLocked++; }
-      else { open += it.cost || 0; nOpen++; }
+      const units = unitsFor(state, it);
+      const line = effCost(state, it);
+      est += (it.cost || 0) * units;
+      eff += line;
+      if (hasActual(it)) { locked += line; nLocked++; }
+      else { open += line; nOpen++; }
     }
     return { est, eff, locked, open, nLocked, nOpen, variance: eff - est };
   }
 
   return {
     STATUS, STATUS_ORDER, statusOf,
-    hasActual, effCost, variance,
+    hasActual, effCost, variance, unitPrice, unitsFor, priceMode,
+    PRICE_MODES, PRICE_ORDER,
     households, householdById, householdName, totalPeople,
     sharersFor, splitItem, ledger, unfunded, settle, rollup,
     SPLIT_BASES, SPLIT_ORDER, splitBasis, weightOf,
