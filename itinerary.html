@@ -299,10 +299,18 @@
     ul.settle li { padding: 5px 0; font-size: 0.88rem; border-bottom: 1px solid var(--line, #f0f2f6); }
     ul.settle li:last-child { border-bottom: none; }
     ul.settle .amt { float: right; font-weight: 600; }
-    .row-split { display: flex; flex-wrap: wrap; gap: 3px 14px; margin-top: 6px;
-      padding-top: 6px; border-top: 1px dashed var(--line, #e6e9ef);
-      font-size: 0.76rem; color: var(--muted); }
-    .row-shr .n { opacity: .65; }
+    .row-split { display: flex; flex-wrap: wrap; gap: 5px; align-items: center;
+      margin-top: 7px; padding-top: 7px; border-top: 1px dashed var(--line, #e6e9ef); }
+    .row-split-label { font-size: 0.72rem; color: var(--muted); margin-right: 2px; }
+    .shr-chip { font: inherit; font-size: 0.74rem; line-height: 1.3; cursor: pointer;
+      display: inline-flex; align-items: baseline; gap: 5px; white-space: nowrap;
+      padding: 3px 9px; border-radius: 11px; border: 1px solid var(--line, #d7dce5);
+      background: #fff; color: #98a0ad; }
+    .shr-chip:hover { border-color: #1b5fa8; }
+    .shr-chip.on { background: #eef4fc; border-color: #cfe0f5; color: #1b3a63; }
+    .shr-chip .n { font-weight: 600; }
+    .shr-chip .a { font-variant-numeric: tabular-nums; }
+    .shr-chip .a.out { font-style: italic; opacity: .7; }
   </style>
 </head>
 <body>
@@ -418,6 +426,6 @@
   </div>
   <script src="config.js?v=2"></script>
   <script src="booking.js?v=3"></script>
-  <script src="itinerary.js?v=18"></script>
+  <script src="itinerary.js?v=19"></script>
 </body>
 </html>

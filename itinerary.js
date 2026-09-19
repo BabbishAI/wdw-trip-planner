@@ -500,19 +500,9 @@ function buildRow(item) {
   bookBtn.addEventListener("click", () => toggleBooking(item.id));
   actions.append(editBtn, bookBtn, delBtn);
 
-  // What this one line costs each family, so the split is visible without digging.
+  // Who is in on this expense, and what it costs them. Click a family to toggle.
   const houses = Booking.households(state);
-  if (houses.length > 1) {
-    const split = Booking.splitItem(state, item);
-    const parts = houses.filter((h) => split[h.id] >= 0.5)
-      .map((h) => `<span class="row-shr"><span class="n">${escapeHTML(h.name)}</span> ${fmtUSD(Math.round(split[h.id]))}</span>`);
-    if (parts.length) {
-      const d = document.createElement("div");
-      d.className = "row-split";
-      d.innerHTML = parts.join("");
-      main.appendChild(d);
-    }
-  }
+  if (houses.length > 1) main.appendChild(buildWhosIn(item));
 
   row.append(control, main, costCell, actions);
   if (openBookingId !== item.id) return row;
@@ -522,6 +512,60 @@ function buildRow(item) {
   wrap.className = "item-wrap";
   wrap.append(row, buildBookingPanel(item));
   return wrap;
+}
+
+// The per-item participation row: one clickable chip per family.
+function buildWhosIn(item) {
+  const houses = Booking.households(state);
+  const split = Booking.splitItem(state, item);
+  const inIds = new Set(Booking.sharersFor(state, item).map((h) => h.id));
+
+  const row = document.createElement("div");
+  row.className = "row-split";
+
+  const label = document.createElement("span");
+  label.className = "row-split-label";
+  label.textContent = inIds.size === houses.length ? "Everyone:" : "Who's in:";
+  row.appendChild(label);
+
+  for (const h of houses) {
+    const on = inIds.has(h.id);
+    const chip = document.createElement("button");
+    chip.type = "button";
+    chip.className = "shr-chip" + (on ? " on" : "");
+    chip.title = on
+      ? `${h.name} is in — click to take them off this expense`
+      : `${h.name} is sitting this one out — click to add them`;
+    chip.innerHTML = `<span class="n">${escapeHTML(h.name)}</span>` +
+      (on ? `<span class="a">${fmtUSD(Math.round(split[h.id] || 0))}</span>` : '<span class="a out">out</span>');
+    chip.addEventListener("click", () => toggleSharer(item.id, h.id));
+    row.appendChild(chip);
+  }
+  return row;
+}
+
+// Add or remove one household from an expense. An empty shares list means everyone,
+// so collapse back to that when all are in rather than storing every id.
+function toggleSharer(itemId, houseId) {
+  const item = state.items.find((it) => it.id === itemId);
+  if (!item) return;
+  const all = Booking.households(state).map((h) => h.id);
+  let cur = Array.isArray(item.shares) && item.shares.length ? item.shares.slice() : all.slice();
+
+  if (cur.includes(houseId)) {
+    // Never leave an expense with nobody paying for it — the cost would land nowhere.
+    if (cur.length === 1) {
+      window.alert("Someone has to be in on this expense. Delete the line instead if nobody is doing it.");
+      return;
+    }
+    cur = cur.filter((x) => x !== houseId);
+  } else {
+    cur.push(houseId);
+  }
+
+  item.shares = cur.length === all.length ? [] : cur;
+  save();
+  render();
 }
 
 // Id of the item whose booking details are expanded (null when none).
