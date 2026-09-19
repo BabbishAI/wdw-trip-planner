@@ -70,7 +70,8 @@ function readPayload() {
 }
 
 // --- State ----------------------------------------------------------------
-let plan = null;      // decoded payload: { title, items, groupSel, groupOff }
+let plan = null;      // decoded payload: { title, items, households, splitBasis, groupSel, groupOff }
+let planId = "";      // the ?id= of a cloud plan, used to scope this viewer's own settings
 let vSel = {};        // group name -> chosen item id, or "" for none
 let vInc = {};        // optional item id -> included (bool)
 
@@ -107,14 +108,14 @@ function initSelections() {
 // --- Totals ---------------------------------------------------------------
 function costOf(id) {
   const it = plan.items.find((x) => x.id === id);
-  return it ? it.cost : 0;
+  return it ? Booking.effCost(it) : 0;
 }
 function computeTotal() {
   let total = 0;
   for (const it of plan.items) {
     if (it.group) continue; // groups handled below
-    if (it.optional) { if (vInc[it.id]) total += it.cost; }
-    else total += it.cost;
+    if (it.optional) { if (vInc[it.id]) total += Booking.effCost(it); }
+    else total += Booking.effCost(it);
   }
   for (const name of groupNames()) {
     if (vSel[name]) total += costOf(vSel[name]);
@@ -157,8 +158,16 @@ function buildItemRow(item) {
 
   const cost = document.createElement("div");
   cost.className = "v-cost";
-  const perPerson = perPersonText(item.cost, item.people);
-  cost.innerHTML = fmtUSD(item.cost) + (perPerson ? `<span class="v-perperson">${perPerson}</span>` : "");
+  const eff = Booking.effCost(item);
+  const perPerson = perPersonText(eff, item.people);
+  let costHTML = fmtUSD(eff);
+  if (Booking.hasActual(item)) {
+    const v = Booking.variance(item);
+    if (Math.abs(v) >= 1) {
+      costHTML += `<span class="v-var ${v > 0 ? "over" : "under"}">${v > 0 ? "+" : "\u2212"}${fmtUSD(Math.abs(v))} vs est</span>`;
+    }
+  }
+  cost.innerHTML = costHTML + (perPerson ? `<span class="v-perperson">${perPerson}</span>` : "");
 
   row.append(control, main, cost);
   return row;
@@ -247,6 +256,153 @@ function buildTimeline() {
   return frag;
 }
 
+// Which household this viewer says they are. Stored per plan, in this browser only.
+function meKey() { return "wdw-me-" + (planId || "hash"); }
+function getMe() {
+  try { return localStorage.getItem(meKey()) || ""; } catch (e) { return ""; }
+}
+function setMe(id) {
+  try { id ? localStorage.setItem(meKey(), id) : localStorage.removeItem(meKey()); } catch (e) {}
+  render();
+}
+
+// Only the items this viewer's selections actually count toward the trip.
+function countedItems() {
+  const out = [];
+  for (const it of plan.items) {
+    if (it.group) { if (vSel[it.group] === it.id) out.push(it); }
+    else if (it.optional) { if (vInc[it.id]) out.push(it); }
+    else out.push(it);
+  }
+  return out;
+}
+
+// "Which family are you?" — plus, once answered, that family's own bottom line.
+function buildYouPanel() {
+  const houses = Booking.households(plan);
+  if (houses.length === 0) return null;
+
+  const panel = document.createElement("div");
+  panel.className = "panel";
+  const me = getMe();
+
+  const head = document.createElement("div");
+  head.className = "you-head";
+  head.textContent = me ? "Your share" : "Which family are you?";
+  panel.appendChild(head);
+
+  const pick = document.createElement("select");
+  pick.className = "you-pick";
+  const none = document.createElement("option");
+  none.value = "";
+  none.textContent = "— choose your family —";
+  none.selected = !me;
+  pick.appendChild(none);
+  for (const h of houses) {
+    const o = document.createElement("option");
+    o.value = h.id;
+    const kids = Booking.kidsOf(h);
+    o.textContent = h.name + " (" + Booking.adultsOf(h) + " adult" + (Booking.adultsOf(h) === 1 ? "" : "s") +
+      (kids ? ", " + kids + " kid" + (kids === 1 ? "" : "s") : "") + ")";
+    o.selected = me === h.id;
+    pick.appendChild(o);
+  }
+  pick.addEventListener("change", () => setMe(pick.value));
+  panel.appendChild(pick);
+
+  if (!me) {
+    const hint = document.createElement("div");
+    hint.className = "you-note";
+    hint.textContent = "Pick your family and this page will show what your household owes, and what you've already paid. It's remembered on this device only — nobody else sees your choice.";
+    panel.appendChild(hint);
+    return panel;
+  }
+
+  const counted = countedItems();
+  const rows = Booking.ledger(plan, counted);
+  const mine = rows.find((r) => r.id === me);
+  if (!mine) return panel;
+
+  const net = Math.round(mine.net);
+  const netText = net === 0
+    ? "You're square with the group."
+    : net > 0
+      ? `The group owes you ${fmtUSD(net)}.`
+      : `You owe the group ${fmtUSD(-net)}.`;
+
+  const body = document.createElement("div");
+  body.className = "you-body";
+  body.innerHTML =
+    `<div class="you-big ${net < 0 ? "neg" : net > 0 ? "pos" : ""}">${netText}</div>` +
+    `<div class="total-row"><span class="label">Your share of the trip</span><span class="val">${fmtUSD(Math.round(mine.owes))}</span></div>` +
+    `<div class="total-row"><span class="label">You've already paid</span><span class="val">${fmtUSD(Math.round(mine.paid))}</span></div>`;
+  panel.appendChild(body);
+
+  // Line-by-line, so the number above is never a black box.
+  const lines = counted
+    .map((it) => ({ it, amt: Booking.splitItem(plan, it)[me] || 0 }))
+    .filter((r) => r.amt >= 0.5);
+  if (lines.length) {
+    let html = '<table class="you-lines"><tbody>';
+    for (const r of lines) {
+      html += `<tr><td>${escapeHTML(r.it.title)}</td><td class="amt">${fmtUSD(Math.round(r.amt))}</td></tr>`;
+    }
+    html += "</tbody></table>";
+    const det = document.createElement("details");
+    det.className = "you-detail";
+    det.innerHTML = "<summary>How your share breaks down</summary>" + html;
+    panel.appendChild(det);
+  }
+
+  const basis = Booking.SPLIT_BASES[Booking.splitBasis(plan)];
+  if (basis) {
+    const note = document.createElement("div");
+    note.className = "you-note";
+    note.textContent = "Shared costs are split " + basis.label.toLowerCase() + ".";
+    panel.appendChild(note);
+  }
+  return panel;
+}
+
+// The whole group's books, so nobody has to take the organiser's word for it.
+function buildLedgerPanel() {
+  const houses = Booking.households(plan);
+  if (houses.length === 0) return null;
+  const counted = countedItems();
+  const rows = Booking.ledger(plan, counted);
+  const owedToVendors = Booking.unfunded(plan, counted);
+  const me = getMe();
+
+  const panel = document.createElement("div");
+  panel.className = "panel";
+  let html = '<div class="you-head">Everyone\u2019s share</div>';
+  html += '<table class="v-ledger"><thead><tr><th>Household</th><th>Share of trip</th><th>Paid so far</th><th>Owes the group</th></tr></thead><tbody>';
+  for (const r of rows) {
+    const net = Math.round(r.net);
+    const cls = net > 0 ? "pos" : net < 0 ? "neg" : "";
+    const netText = net === 0 ? "even" : net > 0 ? `owed ${fmtUSD(net)}` : `owes ${fmtUSD(-net)}`;
+    html += `<tr${r.id === me ? ' class="is-me"' : ""}><td>${escapeHTML(r.name)}</td>` +
+      `<td>${fmtUSD(Math.round(r.owes))}</td><td>${fmtUSD(Math.round(r.paid))}</td>` +
+      `<td class="net ${cls}">${netText}</td></tr>`;
+  }
+  html += "</tbody></table>";
+
+  const transfers = Booking.settle(rows);
+  if (transfers.length) {
+    html += '<div class="you-head" style="margin-top:14px;">Settling up</div><ul class="settle">';
+    for (const t of transfers) {
+      const mineFlag = t.fromId === me || t.toId === me;
+      html += `<li${mineFlag ? ' class="is-me"' : ""}><strong>${escapeHTML(t.from)}</strong> pays <strong>${escapeHTML(t.to)}</strong> <span class="amt">${fmtUSD(Math.round(t.amount))}</span></li>`;
+    }
+    html += "</ul>";
+  }
+  if (owedToVendors >= 1) {
+    html += `<div class="you-note"><strong>${fmtUSD(Math.round(owedToVendors))}</strong> of the trip hasn\u2019t been paid by anyone yet, so it isn\u2019t in the settling-up above \u2014 that money is still owed to airlines, hosts and parks.</div>`;
+  }
+  panel.innerHTML = html;
+  return panel;
+}
+
 function render() {
   const root = $("#viewRoot");
   const title = plan.title || "Trip Itinerary";
@@ -283,6 +439,11 @@ function render() {
     `<span class="val">${fmtUSD(total)}</span></div>` +
     (note ? `<div class="total-note">${note}</div>` : "");
   root.appendChild(totalPanel);
+
+  const you = buildYouPanel();
+  if (you) root.appendChild(you);
+  const ledger = buildLedgerPanel();
+  if (ledger) root.appendChild(ledger);
 }
 
 function renderEmpty() {
@@ -310,6 +471,7 @@ function startPlan() {
 
 async function init() {
   const id = new URLSearchParams(location.search).get("id");
+  planId = id || "";
   if (id) {
     // Baked-in plans are served instantly and never depend on the cloud DB.
     const local = (window.LOCAL_PLANS || {})[id];

@@ -218,6 +218,87 @@
       .item-row { grid-template-columns: 26px 1fr auto; row-gap: 4px; }
       .item-actions { grid-column: 2 / -1; justify-content: flex-end; }
     }
+
+    /* Households travelling together */
+    .hh-row { display: flex; gap: 8px; align-items: center; margin-bottom: 6px; }
+    .hh-row .hh-name { flex: 1; min-width: 0; }
+    .hh-row .hh-count { width: 68px; }
+    .hh-row .hh-share { border-color: #1b5fa8; font-weight: 600; }
+    .basis-wrap { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line, #e6e9ef); }
+    .basis-wrap select { width: 100%; max-width: 420px; font: inherit; font-size: 0.88rem;
+      padding: 6px 8px; border: 1px solid var(--line, #d7dce5); border-radius: 6px;
+      background: #fff; display: block; margin-top: 4px; }
+    .hh-tally { font-size: 0.8rem; color: var(--muted); margin-top: 8px; }
+    .hh-size { display: inline-block; min-width: 18px; padding: 0 5px; margin-left: 4px;
+      border-radius: 9px; background: var(--chip, #eef1f6); color: var(--muted);
+      font-size: 0.72rem; text-align: center; }
+    .add-hh { display: flex; gap: 8px; align-items: center; margin-top: 10px; }
+    .add-hh .hh-name { flex: 1; }
+    .add-hh .hh-count { width: 72px; }
+    .empty.small { padding: 12px 6px; font-size: 0.86rem; }
+
+    /* Status badges + confirmation numbers on each row */
+    .badge { display: inline-block; padding: 1px 7px; border-radius: 9px;
+      font-size: 0.7rem; font-weight: 600; letter-spacing: .02em; }
+    .badge.st-est { background: #eef1f6; color: #5a6475; }
+    .badge.st-booked { background: #e3f0ff; color: #1b5fa8; }
+    .badge.st-paid { background: #e2f5e9; color: #1d7a45; }
+    .conf { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.74rem; }
+
+    /* Estimate-vs-actual delta next to a cost */
+    .item-cost .var { display: block; font-size: 0.72rem; font-weight: 500; margin-top: 1px; }
+    .var.over { color: #b3261e; }
+    .var.under { color: #1d7a45; }
+    .var.on { color: var(--muted); }
+
+    /* Expanding booking-details panel */
+    .item-wrap { border-bottom: 1px solid var(--line, #e6e9ef); }
+    .item-wrap > .item-row { border-bottom: none; }
+    .booking-panel { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 12px; padding: 14px 16px 16px; background: var(--panel-alt, #f7f9fc);
+      border-top: 1px dashed var(--line, #e6e9ef); }
+    .booking-panel .bk-field { display: flex; flex-direction: column; gap: 4px; }
+    .booking-panel .bk-wide { grid-column: 1 / -1; }
+    .booking-panel .bk-label { font-size: 0.74rem; font-weight: 600; color: var(--muted); }
+    .booking-panel .bk-label em { font-weight: 400; font-style: normal; opacity: .8; }
+    .booking-panel input, .booking-panel select, .booking-panel textarea {
+      width: 100%; box-sizing: border-box; font: inherit; font-size: 0.86rem;
+      padding: 6px 8px; border: 1px solid var(--line, #d7dce5); border-radius: 6px; background: #fff; }
+    .booking-panel textarea { resize: vertical; }
+    .bk-boxes { display: flex; flex-wrap: wrap; gap: 10px 16px; padding: 2px 0; }
+    .bk-box { display: inline-flex; align-items: center; gap: 4px; font-size: 0.86rem; white-space: nowrap; }
+    .bk-box input { flex: none; }
+    .bk-note { font-size: 0.76rem; color: var(--muted); margin-top: 4px; }
+    .icon-btn.on { background: var(--accent, #1b5fa8); color: #fff; border-color: transparent; }
+
+    /* Estimated-vs-actual summary */
+    .reality-head { font-size: 0.76rem; font-weight: 700; letter-spacing: .04em;
+      text-transform: uppercase; color: var(--muted); margin: 4px 0 8px; }
+    .reality-bar { height: 8px; border-radius: 5px; background: #e6e9ef; overflow: hidden; margin-bottom: 10px; }
+    .reality-bar .bar-locked { display: block; height: 100%; background: #1d7a45; }
+    .key-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
+    .key-dot.locked { background: #1d7a45; }
+    .key-dot.open { background: #c3c9d4; }
+    .total-row.muted { color: var(--muted); font-size: 0.84rem; }
+    .reality-note { font-size: 0.8rem; color: var(--muted); margin-top: 8px; line-height: 1.5; }
+    .reality-note .var { font-weight: 600; }
+
+    /* Who-owes-what table + settle up */
+    table.ledger { width: 100%; border-collapse: collapse; font-size: 0.86rem; margin-bottom: 12px; }
+    table.ledger th { text-align: right; font-size: 0.72rem; text-transform: uppercase;
+      letter-spacing: .03em; color: var(--muted); padding: 4px 6px; border-bottom: 1px solid var(--line, #e6e9ef); }
+    table.ledger th:first-child, table.ledger td:first-child { text-align: left; }
+    table.ledger td { text-align: right; padding: 6px; border-bottom: 1px solid var(--line, #f0f2f6); }
+    table.ledger td.net { font-weight: 600; }
+    table.ledger td.net.pos { color: #1d7a45; }
+    table.ledger td.net.neg { color: #b3261e; }
+    table.ledger td.net.zero { color: var(--muted); font-weight: 400; }
+    .settle-head { font-size: 0.76rem; font-weight: 700; letter-spacing: .04em;
+      text-transform: uppercase; color: var(--muted); margin-bottom: 6px; }
+    ul.settle { list-style: none; padding: 0; margin: 0; }
+    ul.settle li { padding: 5px 0; font-size: 0.88rem; border-bottom: 1px solid var(--line, #f0f2f6); }
+    ul.settle li:last-child { border-bottom: none; }
+    ul.settle .amt { float: right; font-weight: 600; }
   </style>
 </head>
 <body>
@@ -294,6 +375,18 @@
     </div>
 
     <div class="panel">
+      <h2 class="panel-title">Who's coming</h2>
+      <div class="field-hint" style="margin-top:-4px;">Each family that's travelling, split into adults and children &mdash; how much a child counts toward a shared cost is your call, set below.</div>
+      <div id="householdList"></div>
+      <div class="add-hh">
+        <input id="hhName" class="hh-name" type="text" placeholder="Family name, e.g. The Tornabenes">
+        <input id="hhAdults" class="hh-count" type="number" min="0" step="1" placeholder="adults" title="Adults">
+        <input id="hhKids" class="hh-count" type="number" min="0" step="1" placeholder="kids" title="Children">
+        <button class="icon-btn" id="addHhBtn" type="button">+ Add family</button>
+      </div>
+    </div>
+
+    <div class="panel">
       <div class="list-controls">
         <h2 class="panel-title" style="margin:0;">Your itinerary</h2>
         <span class="sort-control">
@@ -315,8 +408,12 @@
       </div>
       <div class="total-note" id="totalNote"></div>
     </div>
+
+    <div class="panel" id="realityBox"></div>
+    <div class="panel" id="ledgerBox"></div>
   </div>
   <script src="config.js?v=1"></script>
-  <script src="itinerary.js?v=14"></script>
+  <script src="booking.js?v=3"></script>
+  <script src="itinerary.js?v=17"></script>
 </body>
 </html>

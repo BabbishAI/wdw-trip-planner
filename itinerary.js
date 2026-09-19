@@ -43,7 +43,7 @@ const TYPE_ORDER = ["flight", "stay", "car", "reservation", "ticket", "other"];
 // (contributes $0) while remembering the selection for when it's turned back on.
 // lastDate/lastEndDate remember the most recently entered range so new items default
 // to the same timeframe — this keeps the calendar opening on the trip's months.
-let state = { title: "", sort: "type", items: [], groupSel: {}, groupOff: {}, lastDate: "", lastEndDate: "", lastPeople: "", cloudId: "", published: false };
+let state = { title: "", sort: "type", items: [], households: [], splitBasis: "people", groupSel: {}, groupOff: {}, lastDate: "", lastEndDate: "", lastPeople: "", cloudId: "", published: false };
 
 const SUPABASE = window.SUPABASE || {};
 
@@ -55,7 +55,7 @@ function load() {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return;
     const parsed = JSON.parse(raw);
-    const defaults = { title: "", sort: "type", items: [], groupSel: {}, groupOff: {}, lastDate: "", lastEndDate: "", lastPeople: "", cloudId: "", published: false };
+    const defaults = { title: "", sort: "type", items: [], households: [], splitBasis: "people", groupSel: {}, groupOff: {}, lastDate: "", lastEndDate: "", lastPeople: "", cloudId: "", published: false };
     if (Array.isArray(parsed)) {
       // Migrate v1 format (bare items array) into the state object.
       state = Object.assign(defaults, { items: parsed });
@@ -67,6 +67,15 @@ function load() {
       if (typeof it.date !== "string") it.date = "";
       if (typeof it.endDate !== "string") it.endDate = "";
       if (typeof it.people !== "number") it.people = 0; // 0 = unspecified
+      // Booking fields — added when the trip went from guesses to real reservations.
+      if (!("actual" in it)) it.actual = null;        // null until real money is known
+      if (typeof it.status !== "string") it.status = "est";
+      if (typeof it.conf !== "string") it.conf = "";
+      if (typeof it.vendor !== "string") it.vendor = "";
+      if (typeof it.payer !== "string") it.payer = "";
+      if (typeof it.notes !== "string") it.notes = "";
+      if (typeof it.url !== "string") it.url = "";
+      if (!Array.isArray(it.shares)) it.shares = [];  // empty = split across everyone
       if (typeof it.group !== "string") it.group = "";
       if (typeof it.optional !== "boolean") it.optional = false;
       if (typeof it.included !== "boolean") it.included = true;
@@ -267,6 +276,8 @@ function addItem() {
     optional: mode === "optional",
     included: true,
     group,
+    // Everything starts as an estimate; booking details get filled in once it's real.
+    actual: null, status: "est", conf: "", vendor: "", payer: "", notes: "", url: "", shares: [],
   };
   state.items.push(item);
   // Remember these so the next item defaults to the same timeframe and party size.
@@ -448,14 +459,29 @@ function buildRow(item) {
     if (dateText) subParts.push(`<span class="item-date">${dateText}</span>`);
   }
   if (item.people) subParts.push(`for ${item.people}`);
+  const st = Booking.STATUS[Booking.statusOf(item)];
+  subParts.push(`<span class="badge ${st.cls}">${st.label}</span>`);
+  if (item.conf) subParts.push(`<span class="conf">#${escapeHTML(item.conf)}</span>`);
+  if (item.payer) {
+    const payerName = Booking.householdName(state, item.payer);
+    if (payerName) subParts.push(`paid by ${escapeHTML(payerName)}`);
+  }
   main.innerHTML =
     `<span class="item-title"><span class="item-icon">${meta.icon}</span>${escapeHTML(item.title)}</span>` +
     `<span class="item-sub">${subParts.join(" · ")}</span>`;
 
   const costCell = document.createElement("div");
   costCell.className = "item-cost";
-  const perPerson = perPersonText(item.cost, item.people);
-  costCell.innerHTML = fmtUSD(item.cost) + (perPerson ? `<span class="per-person">${perPerson}</span>` : "");
+  const eff = Booking.effCost(item);
+  const perPerson = perPersonText(eff, item.people);
+  let costHTML = fmtUSD(eff);
+  if (Booking.hasActual(item)) {
+    // Real money has landed — say how it compares with what we guessed.
+    const v = Booking.variance(item);
+    if (Math.abs(v) < 1) costHTML += '<span class="var on">on estimate</span>';
+    else costHTML += `<span class="var ${v > 0 ? "over" : "under"}">${v > 0 ? "+" : "\u2212"}${fmtUSD(Math.abs(v))} vs ${fmtUSD(item.cost || 0)} est</span>`;
+  }
+  costCell.innerHTML = costHTML + (perPerson ? `<span class="per-person">${perPerson}</span>` : "");
 
   const actions = document.createElement("div");
   actions.className = "item-actions";
@@ -467,10 +493,163 @@ function buildRow(item) {
   delBtn.className = "icon-btn danger";
   delBtn.textContent = "Delete";
   delBtn.addEventListener("click", () => deleteItem(item.id));
-  actions.append(editBtn, delBtn);
+  const bookBtn = document.createElement("button");
+  bookBtn.className = "icon-btn" + (openBookingId === item.id ? " on" : "");
+  bookBtn.textContent = Booking.hasActual(item) || item.conf ? "Booking \u2713" : "Booking";
+  bookBtn.title = "Confirmation number, what was really charged, who paid, who splits it";
+  bookBtn.addEventListener("click", () => toggleBooking(item.id));
+  actions.append(editBtn, bookBtn, delBtn);
 
   row.append(control, main, costCell, actions);
-  return row;
+  if (openBookingId !== item.id) return row;
+
+  // The booking panel expands underneath the row it belongs to.
+  const wrap = document.createElement("div");
+  wrap.className = "item-wrap";
+  wrap.append(row, buildBookingPanel(item));
+  return wrap;
+}
+
+// Id of the item whose booking details are expanded (null when none).
+let openBookingId = null;
+
+function toggleBooking(id) {
+  openBookingId = openBookingId === id ? null : id;
+  render();
+}
+
+// Editor for everything that turns an estimate into a real reservation.
+function buildBookingPanel(item) {
+  const panel = document.createElement("div");
+  panel.className = "booking-panel";
+  // Every control saves and re-renders on change, so there's no separate save step.
+  const commit = (fn) => () => { fn(); save(); render(); };
+
+  function field(label, hint, wide) {
+    const w = document.createElement("label");
+    w.className = "bk-field" + (wide ? " bk-wide" : "");
+    w.innerHTML = `<span class="bk-label">${label}${hint ? ` <em>${hint}</em>` : ""}</span>`;
+    return w;
+  }
+
+  // Status — where this sits between "we think" and "money has left the account".
+  const statusWrap = field("Status");
+  const statusSel = document.createElement("select");
+  for (const key of Booking.STATUS_ORDER) {
+    const o = document.createElement("option");
+    o.value = key;
+    o.textContent = Booking.STATUS[key].label;
+    o.selected = Booking.statusOf(item) === key;
+    statusSel.appendChild(o);
+  }
+  statusSel.addEventListener("change", commit(() => { item.status = statusSel.value; }));
+  statusWrap.appendChild(statusSel);
+
+  // Actual charged — blank means this is still just an estimate.
+  const actualWrap = field("Actual charged", "blank = still an estimate");
+  const actualInput = document.createElement("input");
+  actualInput.type = "number";
+  actualInput.min = "0";
+  actualInput.step = "0.01";
+  actualInput.placeholder = `est ${fmtUSD(item.cost || 0)}`;
+  actualInput.value = Booking.hasActual(item) ? String(item.actual) : "";
+  actualInput.addEventListener("change", commit(() => {
+    const raw = actualInput.value.trim();
+    item.actual = raw === "" ? null : Math.max(0, parseFloat(raw) || 0);
+    // Entering real money implies it's at least booked.
+    if (item.actual !== null && item.status === "est") item.status = "booked";
+  }));
+  actualWrap.appendChild(actualInput);
+
+  function textField(label, key, placeholder, hint) {
+    const w = field(label, hint);
+    const inp = document.createElement("input");
+    inp.type = "text";
+    inp.placeholder = placeholder;
+    inp.value = item[key] || "";
+    inp.addEventListener("change", commit(() => { item[key] = inp.value.trim(); }));
+    w.appendChild(inp);
+    return w;
+  }
+
+  // Who fronted the money — drives the settle-up.
+  const payerWrap = field("Paid by");
+  const payerSel = document.createElement("select");
+  const noneOpt = document.createElement("option");
+  noneOpt.value = "";
+  noneOpt.textContent = "\u2014 nobody yet \u2014";
+  noneOpt.selected = !item.payer;
+  payerSel.appendChild(noneOpt);
+  for (const h of Booking.households(state)) {
+    const o = document.createElement("option");
+    o.value = h.id;
+    o.textContent = h.name;
+    o.selected = item.payer === h.id;
+    payerSel.appendChild(o);
+  }
+  payerSel.addEventListener("change", commit(() => { item.payer = payerSel.value; }));
+  payerWrap.appendChild(payerSel);
+
+  panel.append(
+    statusWrap,
+    actualWrap,
+    textField("Confirmation #", "conf", "e.g. HMKQ4X2B"),
+    textField("Booked with", "vendor", "e.g. JetBlue, Airbnb"),
+    payerWrap,
+    textField("Link", "url", "https://\u2026")
+  );
+
+  // Who splits it. Nothing checked means the whole group is in on it.
+  const houses = Booking.households(state);
+  const splitWrap = field("Split between", "none checked = everyone", true);
+  if (houses.length === 0) {
+    const note = document.createElement("div");
+    note.className = "bk-note";
+    note.textContent = "Add the families travelling with you up top, then you can split this between them.";
+    splitWrap.appendChild(note);
+  } else {
+    const boxes = document.createElement("div");
+    boxes.className = "bk-boxes";
+    for (const h of houses) {
+      const lab = document.createElement("span");
+      lab.className = "bk-box";
+      const cb = document.createElement("input");
+      cb.type = "checkbox";
+      cb.checked = Array.isArray(item.shares) && item.shares.includes(h.id);
+      cb.addEventListener("change", commit(() => {
+        const picked = new Set(Array.isArray(item.shares) ? item.shares : []);
+        if (cb.checked) picked.add(h.id); else picked.delete(h.id);
+        item.shares = [...picked];
+      }));
+      const text = document.createElement("span");
+      text.textContent = ` ${h.name} (${Booking.headsOf(h)})`;
+      lab.append(cb, text);
+      boxes.appendChild(lab);
+    }
+    splitWrap.appendChild(boxes);
+    // Show the resulting damage per household so the split is never a mystery.
+    const split = Booking.splitItem(state, item);
+    const parts = Object.keys(split)
+      .map((id) => `${Booking.householdName(state, id)} ${fmtUSD(Math.round(split[id]))}`)
+      .join(" \u00b7 ");
+    if (parts) {
+      const out = document.createElement("div");
+      out.className = "bk-note";
+      out.textContent = `Each household's share: ${parts}`;
+      splitWrap.appendChild(out);
+    }
+  }
+  panel.appendChild(splitWrap);
+
+  const notesWrap = field("Notes", "flight numbers, check-in time, door code\u2026", true);
+  const notes = document.createElement("textarea");
+  notes.rows = 2;
+  notes.value = item.notes || "";
+  notes.addEventListener("change", commit(() => { item.notes = notes.value.trim(); }));
+  notesWrap.appendChild(notes);
+  panel.appendChild(notesWrap);
+
+  return panel;
 }
 
 function escapeHTML(s) {
@@ -549,6 +728,7 @@ function orderedGroupNames() {
 function render() {
   ensureGroupSelections();
   refreshGroupDatalist();
+  renderHouseholds();
   const list = $("itineraryList");
   list.innerHTML = "";
 
@@ -603,16 +783,19 @@ function render() {
 }
 
 function renderTotals() {
+  // Every total runs on the effective cost: real money where we have it, estimate elsewhere.
+  const counted = state.items.filter(isCounted);
   let fixed = 0, choices = 0, optionalInc = 0;
   let optionalCount = 0, optionalOn = 0;
   for (const item of state.items) {
+    const c = Booking.effCost(item);
     if (item.group) {
-      if (isCounted(item)) choices += item.cost;
+      if (isCounted(item)) choices += c;
     } else if (item.optional) {
       optionalCount++;
-      if (item.included) { optionalInc += item.cost; optionalOn++; }
+      if (item.included) { optionalInc += c; optionalOn++; }
     } else {
-      fixed += item.cost;
+      fixed += c;
     }
   }
   const grand = fixed + choices + optionalInc;
@@ -629,14 +812,234 @@ function renderTotals() {
   ).join("");
   $("grandTotal").textContent = fmtUSD(grand);
 
-  const counted = state.items.filter(isCounted).length;
   let note = "";
   if (state.items.length > 0) {
-    note = `${counted} of ${state.items.length} item${state.items.length === 1 ? "" : "s"} counted`;
+    note = `${counted.length} of ${state.items.length} item${state.items.length === 1 ? "" : "s"} counted`;
     if (optionalCount > 0) note += ` · ${optionalOn}/${optionalCount} optional on`;
     if (hasGroups) note += ` · ${groupNames().length} choice group${groupNames().length === 1 ? "" : "s"}`;
   }
   $("totalNote").textContent = note;
+
+  renderReality(counted);
+  renderLedger(counted);
+}
+
+// The estimate-vs-reality bar: how much of the trip is locked in, and whether the
+// real charges are landing above or below what we budgeted.
+function renderReality(counted) {
+  const box = $("realityBox");
+  if (!box) return;
+  const r = Booking.rollup(counted);
+  if (counted.length === 0) { box.innerHTML = ""; return; }
+
+  const pct = r.eff > 0 ? Math.round((r.locked / r.eff) * 100) : 0;
+  let varLine = "";
+  if (r.nLocked > 0) {
+    if (Math.abs(r.variance) < 1) {
+      varLine = '<span class="var on">Real costs are landing exactly on the estimate.</span>';
+    } else {
+      const over = r.variance > 0;
+      varLine = `<span class="var ${over ? "over" : "under"}">Real costs are landing ${fmtUSD(Math.abs(r.variance))} ${over ? "OVER" : "UNDER"} the original estimate.</span>`;
+    }
+  }
+
+  box.innerHTML =
+    '<div class="reality-head">Estimated vs actual</div>' +
+    '<div class="reality-bar" title="Share of the trip total that is real, booked money">' +
+      `<span class="bar-locked" style="width:${pct}%"></span>` +
+    '</div>' +
+    '<div class="reality-rows">' +
+      `<div class="total-row"><span class="label"><span class="key-dot locked"></span>Booked / paid ${r.nLocked ? `(${r.nLocked} item${r.nLocked === 1 ? "" : "s"})` : ""}</span><span class="val">${fmtUSD(r.locked)}</span></div>` +
+      `<div class="total-row"><span class="label"><span class="key-dot open"></span>Still estimated ${r.nOpen ? `(${r.nOpen} item${r.nOpen === 1 ? "" : "s"})` : ""}</span><span class="val">${fmtUSD(r.open)}</span></div>` +
+      `<div class="total-row muted"><span class="label">Original estimate for the same items</span><span class="val">${fmtUSD(r.est)}</span></div>` +
+    '</div>' +
+    `<div class="reality-note">${pct}% of the trip is locked in. ${varLine}</div>`;
+}
+
+// Per-household books plus the shortest set of transfers that squares everyone up.
+function renderLedger(counted) {
+  const box = $("ledgerBox");
+  if (!box) return;
+  const houses = Booking.households(state);
+  if (houses.length === 0 || counted.length === 0) { box.innerHTML = ""; return; }
+
+  const rows = Booking.ledger(state, counted);
+  const heads = Booking.totalPeople(state);
+  const owedToVendors = Booking.unfunded(state, counted);
+
+  let html = `<div class="reality-head">Who owes what · ${houses.length} households, ${heads} ${heads === 1 ? "person" : "people"}</div>`;
+  html += '<table class="ledger"><thead><tr>' +
+    '<th>Household</th>' +
+    '<th title="Their share of the whole trip">Share of trip</th>' +
+    '<th title="What this household has already laid out">Fronted</th>' +
+    '<th title="Settling up only moves money somebody actually paid">Owes the group</th>' +
+    '</tr></thead><tbody>';
+  for (const r of rows) {
+    const net = Math.round(r.net);
+    const cls = net > 0 ? "pos" : net < 0 ? "neg" : "zero";
+    const netText = net === 0 ? "even" : net > 0 ? `owed ${fmtUSD(net)}` : `owes ${fmtUSD(-net)}`;
+    html += `<tr><td>${escapeHTML(r.name)} <span class="hh-size">${r.size}</span></td>` +
+      `<td>${fmtUSD(Math.round(r.owes))}</td>` +
+      `<td>${fmtUSD(Math.round(r.paid))}</td>` +
+      `<td class="net ${cls}">${netText}</td></tr>`;
+  }
+  html += "</tbody></table>";
+
+  const transfers = Booking.settle(rows);
+  if (transfers.length === 0) {
+    html += '<div class="reality-note">Nobody owes anybody yet — set "Paid by" on an expense and the settle-up will appear here.</div>';
+  } else {
+    html += `<div class="settle-head">Settle up in ${transfers.length} payment${transfers.length === 1 ? "" : "s"}</div><ul class="settle">`;
+    for (const t of transfers) {
+      html += `<li><strong>${escapeHTML(t.from)}</strong> pays <strong>${escapeHTML(t.to)}</strong> <span class="amt">${fmtUSD(Math.round(t.amount))}</span></li>`;
+    }
+    html += "</ul>";
+  }
+
+  // The gap between "share of trip" and the settle-up: costs still owed to airlines,
+  // hosts and parks rather than to another family.
+  if (owedToVendors >= 1) {
+    html += `<div class="reality-note"><strong>${fmtUSD(Math.round(owedToVendors))}</strong> of the trip has no payer recorded yet, so it isn't in the settle-up above — that money is still owed to airlines, hosts and parks, not to another family. Each household's "share of trip" already includes their part of it.</div>`;
+  }
+
+  box.innerHTML = html;
+}
+
+// --- Households ------------------------------------------------------------
+// The families travelling together. Sizes drive the weighted split, so a family of
+// five carries more of a shared house than a couple does.
+function addHousehold() {
+  const nameEl = $("hhName"), adultsEl = $("hhAdults"), kidsEl = $("hhKids");
+  const name = nameEl.value.trim();
+  if (!name) { nameEl.focus(); return; }
+  const adults = Math.max(0, parseInt(adultsEl.value, 10) || 0);
+  const kids = Math.max(0, parseInt(kidsEl.value, 10) || 0);
+  state.households.push({
+    id: "h" + Date.now() + Math.floor(Math.random() * 1000),
+    name, adults, kids,
+    share: 1,              // full share until the organiser says otherwise
+    size: adults + kids,   // kept so older code paths and saved plans still read a size
+  });
+  nameEl.value = "";
+  adultsEl.value = "";
+  kidsEl.value = "";
+  save();
+  render();
+  nameEl.focus();
+}
+
+function deleteHousehold(id) {
+  const h = Booking.householdById(state, id);
+  const name = h ? h.name : "this household";
+  if (!confirm(`Remove ${name}? Any expense they were paying for or splitting will be unassigned.`)) return;
+  state.households = state.households.filter((x) => x.id !== id);
+  // Clean up references so no item points at a household that no longer exists.
+  for (const it of state.items) {
+    if (it.payer === id) it.payer = "";
+    if (Array.isArray(it.shares)) it.shares = it.shares.filter((x) => x !== id);
+  }
+  save();
+  render();
+}
+
+function renderHouseholds() {
+  const box = $("householdList");
+  if (!box) return;
+  box.innerHTML = "";
+  const houses = Booking.households(state);
+  if (houses.length === 0) {
+    box.innerHTML = '<div class="empty small">No families added yet. Add each household travelling with you — the head count drives how shared costs get split.</div>';
+    return;
+  }
+  for (const h of houses) {
+    const row = document.createElement("div");
+    row.className = "hh-row";
+
+    const name = document.createElement("input");
+    name.type = "text";
+    name.className = "hh-name";
+    name.value = h.name;
+    name.addEventListener("change", () => { h.name = name.value.trim() || h.name; save(); render(); });
+
+    function counter(value, label, apply) {
+      const inp = document.createElement("input");
+      inp.type = "number";
+      inp.className = "hh-count";
+      inp.min = "0";
+      inp.step = "1";
+      inp.value = String(value);
+      inp.title = label;
+      inp.addEventListener("change", () => {
+        apply(Math.max(0, parseInt(inp.value, 10) || 0));
+        h.size = Booking.headsOf(h);   // keep the flat size in step
+        save();
+        render();
+      });
+      return inp;
+    }
+    const adults = counter(Booking.adultsOf(h), "Adults in this household", (v) => { h.adults = v; });
+    const kids = counter(Booking.kidsOf(h), "Children in this household", (v) => { h.kids = v; });
+
+    const del = document.createElement("button");
+    del.className = "icon-btn danger";
+    del.textContent = "Remove";
+    del.addEventListener("click", () => deleteHousehold(h.id));
+
+    row.append(name, adults, kids);
+    if (Booking.splitBasis(state) === "shares") {
+      const share = document.createElement("input");
+      share.type = "number";
+      share.className = "hh-count hh-share";
+      share.min = "0";
+      share.step = "0.25";
+      share.value = String(Booking.shareOf(h));
+      share.title = "This household's share of a shared cost (1 = a full share)";
+      share.addEventListener("change", () => {
+        const n = parseFloat(share.value);
+        h.share = isFinite(n) && n >= 0 ? n : 1;
+        save();
+        render();
+      });
+      row.appendChild(share);
+    }
+    row.appendChild(del);
+    box.appendChild(row);
+  }
+  const heads = Booking.totalPeople(state);
+  const kids = Booking.totalKids(state);
+  const tally = document.createElement("div");
+  tally.className = "hh-tally";
+  tally.textContent =
+    `${houses.length} household${houses.length === 1 ? "" : "s"} · ${heads} ${heads === 1 ? "person" : "people"} total` +
+    (kids ? ` (${Booking.totalAdults(state)} adults, ${kids} ${kids === 1 ? "child" : "children"})` : "");
+  box.appendChild(tally);
+
+  // How a share is weighted is a group decision, so surface it right next to the roster.
+  const basisWrap = document.createElement("div");
+  basisWrap.className = "basis-wrap";
+  const basisLabel = document.createElement("label");
+  basisLabel.className = "bk-label";
+  basisLabel.textContent = "Split shared costs";
+  const basisSel = document.createElement("select");
+  basisSel.id = "splitBasis";
+  for (const key of Booking.SPLIT_ORDER) {
+    const o = document.createElement("option");
+    o.value = key;
+    o.textContent = Booking.SPLIT_BASES[key].label;
+    o.selected = Booking.splitBasis(state) === key;
+    basisSel.appendChild(o);
+  }
+  basisSel.addEventListener("change", () => { state.splitBasis = basisSel.value; save(); render(); });
+  const basisNote = document.createElement("div");
+  basisNote.className = "bk-note";
+  basisNote.textContent = Booking.SPLIT_BASES[Booking.splitBasis(state)].note;
+  if (Booking.splitBasis(state) === "shares") {
+    const totalShares = houses.reduce((n, x) => n + Booking.shareOf(x), 0);
+    basisNote.textContent +=
+      ` Currently ${totalShares} share${totalShares === 1 ? "" : "s"} across ${houses.length} household${houses.length === 1 ? "" : "s"} — the "share" box on each row sets it.`;
+  }
+  basisWrap.append(basisLabel, basisSel, basisNote);
+  box.appendChild(basisWrap);
 }
 
 // --- Sharing --------------------------------------------------------------
@@ -658,8 +1061,14 @@ const LIVE_BUILDER_URL = "https://babbishai.github.io/wdw-trip-planner/itinerary
 
 function currentPayload() {
   return {
+    v: 2,
     title: state.title,
     items: state.items,
+    // The roster has to travel with the plan. Without it a second device rebuilds
+    // households with fresh ids, so item.payer and item.shares match nobody and the
+    // settle-up renders confidently wrong instead of visibly empty.
+    households: state.households,
+    splitBasis: state.splitBasis,
     groupSel: state.groupSel,
     groupOff: state.groupOff,
   };
@@ -786,10 +1195,12 @@ function maybeImportFromHash() {
   if (!window.confirm(question)) { clearHash(); return; }
 
   state = Object.assign(
-    { title: "", sort: "type", items: [], groupSel: {}, groupOff: {}, lastDate: "", lastEndDate: "", lastPeople: "", cloudId: "", published: false },
+    { title: "", sort: "type", items: [], households: [], splitBasis: "people", groupSel: {}, groupOff: {}, lastDate: "", lastEndDate: "", lastPeople: "", cloudId: "", published: false },
     {
       title: payload.title || "",
       items: payload.items || [],
+      households: Array.isArray(payload.households) ? payload.households : [],
+      splitBasis: payload.splitBasis || "people",
       groupSel: payload.groupSel || {},
       groupOff: payload.groupOff || {},
     }
@@ -837,10 +1248,12 @@ async function maybeLoadFromCloud() {
   if (!proceed) { clearId(); return; }
 
   state = Object.assign(
-    { title: "", sort: "type", items: [], groupSel: {}, groupOff: {}, lastDate: "", lastEndDate: "", lastPeople: "", cloudId: "", published: false },
+    { title: "", sort: "type", items: [], households: [], splitBasis: "people", groupSel: {}, groupOff: {}, lastDate: "", lastEndDate: "", lastPeople: "", cloudId: "", published: false },
     {
       title: data.title || "",
       items: data.items || [],
+      households: Array.isArray(data.households) ? data.households : [],
+      splitBasis: data.splitBasis || "people",
       groupSel: data.groupSel || {},
       groupOff: data.groupOff || {},
       cloudId: id,        // adopt the id so edits sync to the same link
@@ -880,6 +1293,10 @@ async function init() {
   render();
 
   $("addBtn").addEventListener("click", addItem);
+  $("addHhBtn").addEventListener("click", addHousehold);
+  for (const id of ["hhName", "hhAdults", "hhKids"]) {
+    $(id).addEventListener("keydown", (e) => { if (e.key === "Enter") addHousehold(); });
+  }
   for (const id of ["itemTitle", "itemCost", "itemPeople", "groupName"]) {
     $(id).addEventListener("keydown", (e) => {
       if (e.key === "Enter") { e.preventDefault(); addItem(); }

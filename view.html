@@ -86,6 +86,46 @@
       .container { padding: 14px; }
       .v-row { grid-template-columns: 24px 1fr auto; }
     }
+
+    /* Estimate-vs-actual + booking details in the shared view */
+    .v-var { display: block; font-size: 0.72rem; font-weight: 500; margin-top: 1px; }
+    .v-var.over { color: #b3261e; }
+    .v-var.under { color: #1d7a45; }
+    .v-badge { display: inline-block; padding: 1px 7px; border-radius: 9px;
+      font-size: 0.7rem; font-weight: 600; }
+    .v-badge.st-est { background: #eef1f6; color: #5a6475; }
+    .v-badge.st-booked { background: #e3f0ff; color: #1b5fa8; }
+    .v-badge.st-paid { background: #e2f5e9; color: #1d7a45; }
+    .v-conf { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.74rem; }
+    table.v-ledger { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
+    table.v-ledger th { text-align: right; font-size: 0.72rem; text-transform: uppercase;
+      letter-spacing: .03em; color: var(--muted); padding: 4px 6px; border-bottom: 1px solid #e6e9ef; }
+    table.v-ledger th:first-child, table.v-ledger td:first-child { text-align: left; }
+    table.v-ledger td { text-align: right; padding: 6px; border-bottom: 1px solid #f0f2f6; }
+    table.v-ledger td.net.pos { color: #1d7a45; font-weight: 600; }
+    table.v-ledger td.net.neg { color: #b3261e; font-weight: 600; }
+
+    .you-head { font-size: 0.76rem; font-weight: 700; letter-spacing: .04em;
+      text-transform: uppercase; color: var(--muted); margin-bottom: 8px; }
+    .you-pick { width: 100%; max-width: 420px; font: inherit; font-size: 0.95rem;
+      padding: 8px 10px; border: 1px solid #d7dce5; border-radius: 7px; background: #fff; }
+    .you-note { font-size: 0.8rem; color: var(--muted); margin-top: 10px; line-height: 1.5; }
+    .you-body { margin-top: 12px; }
+    .you-big { font-size: 1.15rem; font-weight: 700; margin-bottom: 10px; }
+    .you-big.neg { color: #b3261e; }
+    .you-big.pos { color: #1d7a45; }
+    .you-detail { margin-top: 10px; font-size: 0.86rem; }
+    .you-detail summary { cursor: pointer; color: var(--muted); }
+    table.you-lines { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 0.86rem; }
+    table.you-lines td { padding: 5px 0; border-bottom: 1px solid #f0f2f6; }
+    table.you-lines td.amt { text-align: right; font-weight: 600; white-space: nowrap; }
+    table.v-ledger tr.is-me { background: #f3f8ff; }
+    table.v-ledger tr.is-me td:first-child { font-weight: 700; }
+    ul.settle { list-style: none; padding: 0; margin: 0; }
+    ul.settle li { padding: 6px 0; font-size: 0.9rem; border-bottom: 1px solid #f0f2f6; }
+    ul.settle li:last-child { border-bottom: none; }
+    ul.settle li.is-me { font-weight: 600; }
+    ul.settle .amt { float: right; }
   </style>
 </head>
 <body>
@@ -93,7 +133,8 @@
     <div id="viewRoot"></div>
   </div>
   <script src="config.js?v=1"></script>
+  <script src="booking.js?v=3"></script>
   <script src="plans.js?v=1"></script>
-  <script src="view.js?v=4"></script>
+  <script src="view.js?v=7"></script>
 </body>
 </html>
