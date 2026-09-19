@@ -126,6 +126,35 @@
     ul.settle li:last-child { border-bottom: none; }
     ul.settle li.is-me { font-weight: 600; }
     ul.settle .amt { float: right; }
+
+    .v-detail { display: block; margin-top: 6px; }
+    .v-chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+    .v-chip { display: inline-block; padding: 1px 8px; border-radius: 9px;
+      background: #eef1f6; color: #5a6475; font-size: 0.72rem; }
+    .v-confbox { display: inline-flex; align-items: center; gap: 4px;
+      background: #f2f6fc; border: 1px solid #d6e2f2; border-radius: 7px; padding: 1px 4px 1px 8px; }
+    .v-conf { font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 0.78rem; font-weight: 600; letter-spacing: .02em; color: #14396b; }
+    .v-copy { font: inherit; font-size: 0.68rem; font-weight: 600; text-transform: uppercase;
+      letter-spacing: .04em; border: none; background: transparent; color: #1b5fa8;
+      cursor: pointer; padding: 3px 5px; border-radius: 5px; }
+    .v-copy:hover { background: #e2ecfa; }
+    .v-link { display: inline-block; margin-top: 6px; font-size: 0.8rem; color: #1b5fa8; }
+    .v-notes { margin-top: 6px; font-size: 0.8rem; color: #5a6475; line-height: 1.5;
+      white-space: pre-wrap; }
+    .v-split { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 7px;
+      padding-top: 7px; border-top: 1px dashed #e6e9ef; font-size: 0.78rem; color: #5a6475; }
+    .v-shr .n { color: #98a0ad; }
+    details.v-refs summary { cursor: pointer; font-size: 0.76rem; font-weight: 700;
+      letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
+    .v-count { display: inline-block; min-width: 16px; padding: 0 5px; margin-left: 4px;
+      border-radius: 9px; background: #eef1f6; font-size: 0.7rem; text-align: center; }
+    table.v-reftable { width: 100%; border-collapse: collapse; margin-top: 10px; }
+    table.v-reftable td { padding: 7px 0; border-bottom: 1px solid #f0f2f6;
+      font-size: 0.86rem; vertical-align: top; }
+    table.v-reftable tr:last-child td { border-bottom: none; }
+    table.v-reftable td.c { text-align: right; white-space: nowrap; padding-left: 10px; }
+    .v-refwhen { display: block; font-size: 0.74rem; color: var(--muted); margin-top: 1px; }
   </style>
 </head>
 <body>
@@ -135,6 +164,6 @@
   <script src="config.js?v=1"></script>
   <script src="booking.js?v=3"></script>
   <script src="plans.js?v=1"></script>
-  <script src="view.js?v=7"></script>
+  <script src="view.js?v=8"></script>
 </body>
 </html>

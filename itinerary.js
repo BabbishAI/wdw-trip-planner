@@ -500,6 +500,20 @@ function buildRow(item) {
   bookBtn.addEventListener("click", () => toggleBooking(item.id));
   actions.append(editBtn, bookBtn, delBtn);
 
+  // What this one line costs each family, so the split is visible without digging.
+  const houses = Booking.households(state);
+  if (houses.length > 1) {
+    const split = Booking.splitItem(state, item);
+    const parts = houses.filter((h) => split[h.id] >= 0.5)
+      .map((h) => `<span class="row-shr"><span class="n">${escapeHTML(h.name)}</span> ${fmtUSD(Math.round(split[h.id]))}</span>`);
+    if (parts.length) {
+      const d = document.createElement("div");
+      d.className = "row-split";
+      d.innerHTML = parts.join("");
+      main.appendChild(d);
+    }
+  }
+
   row.append(control, main, costCell, actions);
   if (openBookingId !== item.id) return row;
 

@@ -126,6 +126,111 @@ function computeTotal() {
 // --- Rendering ------------------------------------------------------------
 function isRange(item) { return !!(item.endDate && item.endDate > item.date); }
 
+// Everything the group needs to reference about one booking: where it stands, its
+// confirmation code, who it's with, the notes, and each family's share of it.
+function buildItemDetail(item) {
+  const wrap = document.createElement("div");
+  wrap.className = "v-detail";
+
+  const chips = document.createElement("div");
+  chips.className = "v-chips";
+
+  const st = Booking.STATUS[Booking.statusOf(item)];
+  const badge = document.createElement("span");
+  badge.className = "v-badge " + st.cls;
+  badge.textContent = st.label;
+  chips.appendChild(badge);
+
+  if (item.vendor) {
+    const v = document.createElement("span");
+    v.className = "v-chip";
+    v.textContent = item.vendor;
+    chips.appendChild(v);
+  }
+
+  // The confirmation code, with a copy button — these get typed into airline and
+  // rental apps on a phone, often one-handed at a counter.
+  if (item.conf) {
+    const box = document.createElement("span");
+    box.className = "v-confbox";
+    const code = document.createElement("span");
+    code.className = "v-conf";
+    code.textContent = item.conf;
+    const copy = document.createElement("button");
+    copy.className = "v-copy";
+    copy.type = "button";
+    copy.textContent = "Copy";
+    copy.addEventListener("click", () => {
+      const text = item.conf;
+      const done = () => { copy.textContent = "Copied"; setTimeout(() => { copy.textContent = "Copy"; }, 1400); };
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(done).catch(() => fallbackCopy(text, done));
+      } else {
+        fallbackCopy(text, done);
+      }
+    });
+    box.append(code, copy);
+    chips.appendChild(box);
+  }
+
+  if (item.payer) {
+    const who = Booking.householdName(plan, item.payer);
+    if (who) {
+      const p = document.createElement("span");
+      p.className = "v-chip";
+      p.textContent = "paid by " + who;
+      chips.appendChild(p);
+    }
+  }
+  if (chips.children.length) wrap.appendChild(chips);
+
+  if (item.url) {
+    const a = document.createElement("a");
+    a.className = "v-link";
+    a.href = item.url;
+    a.target = "_blank";
+    a.rel = "noopener noreferrer";
+    a.textContent = "Open booking \u2197";
+    wrap.appendChild(a);
+  }
+
+  if (item.notes) {
+    const n = document.createElement("div");
+    n.className = "v-notes";
+    n.textContent = item.notes;
+    wrap.appendChild(n);
+  }
+
+  // What this one booking costs each household.
+  const houses = Booking.households(plan);
+  if (houses.length > 1) {
+    const split = Booking.splitItem(plan, item);
+    const parts = houses
+      .filter((h) => split[h.id] >= 0.5)
+      .map((h) => `<span class="v-shr"><span class="n">${escapeHTML(h.name)}</span> ${fmtUSD(Math.round(split[h.id]))}</span>`);
+    if (parts.length) {
+      const d = document.createElement("div");
+      d.className = "v-split";
+      d.innerHTML = parts.join("");
+      wrap.appendChild(d);
+    }
+  }
+
+  return wrap;
+}
+
+// Clipboard fallback for browsers that block the async clipboard API.
+function fallbackCopy(text, done) {
+  const ta = document.createElement("textarea");
+  ta.value = text;
+  ta.style.position = "fixed";
+  ta.style.opacity = "0";
+  document.body.appendChild(ta);
+  ta.select();
+  try { document.execCommand("copy"); done(); } catch (e) {}
+  ta.remove();
+}
+
 function buildItemRow(item) {
   const meta = TYPES[item.type] || TYPES.other;
   const included = !item.optional || vInc[item.id];
@@ -168,6 +273,8 @@ function buildItemRow(item) {
     }
   }
   cost.innerHTML = costHTML + (perPerson ? `<span class="v-perperson">${perPerson}</span>` : "");
+
+  main.appendChild(buildItemDetail(item));
 
   row.append(control, main, cost);
   return row;
@@ -275,6 +382,32 @@ function countedItems() {
     else out.push(it);
   }
   return out;
+}
+
+// One place the whole group can find every confirmation code, without scrolling
+// the itinerary. This is the thing people open at a check-in desk.
+function buildConfirmationPanel() {
+  const booked = plan.items.filter((it) => it.conf);
+  if (booked.length === 0) return null;
+
+  const panel = document.createElement("div");
+  panel.className = "panel";
+  const det = document.createElement("details");
+  det.className = "v-refs";
+  det.open = true;
+
+  let html = `<summary>All confirmation numbers <span class="v-count">${booked.length}</span></summary><table class="v-reftable"><tbody>`;
+  for (const it of booked) {
+    const meta = TYPES[it.type] || TYPES.other;
+    const when = fmtDateRange(it.date, it.endDate);
+    html += `<tr><td class="w"><span class="v-icon">${meta.icon}</span>${escapeHTML(it.title)}` +
+      (when ? `<span class="v-refwhen">${when}</span>` : "") +
+      `</td><td class="c"><span class="v-conf">${escapeHTML(it.conf)}</span></td></tr>`;
+  }
+  html += "</tbody></table>";
+  det.innerHTML = html;
+  panel.appendChild(det);
+  return panel;
 }
 
 // "Which family are you?" — plus, once answered, that family's own bottom line.
@@ -439,6 +572,9 @@ function render() {
     `<span class="val">${fmtUSD(total)}</span></div>` +
     (note ? `<div class="total-note">${note}</div>` : "");
   root.appendChild(totalPanel);
+
+  const refs = buildConfirmationPanel();
+  if (refs) root.appendChild(refs);
 
   const you = buildYouPanel();
   if (you) root.appendChild(you);
